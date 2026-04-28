@@ -152,8 +152,85 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildVoiceStates,
   ],
 });
+
+// ── Kitten currency helpers ────────────────────────────────
+const KITTENS_PER_MESSAGE = 5;
+const KITTENS_PER_VC_MINUTE = 5;
+
+function getKittens(userId) {
+  return db.users[userId]?.kittens ?? 0;
+}
+
+function addKittens(userId, amount) {
+  if (!db.users[userId]) db.users[userId] = { name: "Unknown", points: 0, count: 0, lastPoopTime: null, allTimeCount: 0, allTimePoints: 0, weeklyWins: 0 };
+  db.users[userId].kittens = (db.users[userId].kittens ?? 0) + amount;
+  saveData(db);
+}
+
+function removeKittens(userId, amount) {
+  if (!db.users[userId]) return;
+  db.users[userId].kittens = Math.max(0, (db.users[userId].kittens ?? 0) - amount);
+  saveData(db);
+}
+
+// ── VC time tracking ───────────────────────────────────────
+const vcJoinTimes = new Map(); // userId -> Date.now() when they joined VC
+
+// ── Blackjack engine ───────────────────────────────────────
+const activeGames = new Map(); // channelId -> game state
+
+function makeDeck() {
+  const suits = ["♠", "♥", "♦", "♣"];
+  const ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+  const deck = [];
+  for (const suit of suits)
+    for (const rank of ranks)
+      deck.push({ rank, suit });
+  return deck.sort(() => Math.random() - 0.5);
+}
+
+function cardValue(card) {
+  if (["J", "Q", "K"].includes(card.rank)) return 10;
+  if (card.rank === "A") return 11;
+  return parseInt(card.rank);
+}
+
+function handValue(hand) {
+  let total = hand.reduce((sum, c) => sum + cardValue(c), 0);
+  let aces = hand.filter(c => c.rank === "A").length;
+  while (total > 21 && aces > 0) { total -= 10; aces--; }
+  return total;
+}
+
+function formatHand(hand, hideSecond = false) {
+  if (hideSecond) return `${hand[0].rank}${hand[0].suit} 🂠`;
+  return hand.map(c => `${c.rank}${c.suit}`).join("  ");
+}
+
+function buildGameEmbed(game, reveal = false) {
+  const dealerVal = reveal ? handValue(game.dealerHand) : "?";
+  const p1Val = handValue(game.hands[game.p1]);
+  const p2Val = game.p2 ? handValue(game.hands[game.p2]) : null;
+
+  const desc = [
+    `🃏 **Dealer:** ${formatHand(game.dealerHand, !reveal)} ${reveal ? `(${dealerVal})` : ""}`,
+    ``,
+    `😺 **${game.p1Name}:** ${formatHand(game.hands[game.p1])} **(${p1Val})**`,
+  ];
+  if (game.p2) desc.push(`😺 **${game.p2Name}:** ${formatHand(game.hands[game.p2])} **(${p2Val})**`);
+  desc.push(``, `💰 Pot: **${game.bet * (game.p2 ? 2 : 1)} 🐱 kittens**`);
+
+  const whose = game.turn === game.p1 ? game.p1Name : game.p2Name;
+  if (!reveal) desc.push(`\n⏳ **${whose}'s turn** — \`!hit\` or \`!stand\``);
+
+  return new EmbedBuilder()
+    .setTitle("🃏  Blackjack")
+    .setDescription(desc.join("\n"))
+    .setColor(0x2ecc71);
+}
 
 let db = loadData();
 pickTodaysWindows();
@@ -226,9 +303,48 @@ cron.schedule("0 0 * * *", () => {
   pickTodaysWindows();
 });
 
+// ── VC join/leave — earn kittens for time spent ───────────
+client.on("voiceStateUpdate", (oldState, newState) => {
+  const userId = newState.member?.id;
+  if (!userId || newState.member?.user.bot) return;
+
+  const joined = !oldState.channelId && newState.channelId;
+  const left = oldState.channelId && !newState.channelId;
+
+  if (joined) {
+    vcJoinTimes.set(userId, Date.now());
+  } else if (left) {
+    const joinTime = vcJoinTimes.get(userId);
+    if (joinTime) {
+      const minutesSpent = Math.floor((Date.now() - joinTime) / 60000);
+      if (minutesSpent > 0) {
+        const earned = minutesSpent * KITTENS_PER_VC_MINUTE;
+        const name = newState.member?.displayName ?? "Unknown";
+        if (!db.users[userId]) db.users[userId] = { name, points: 0, count: 0, lastPoopTime: null, allTimeCount: 0, allTimePoints: 0, weeklyWins: 0, kittens: 0 };
+        db.users[userId].name = name;
+        addKittens(userId, earned);
+        console.log(`[UltimateShitter] ${name} earned ${earned} kittens for ${minutesSpent} min in VC`);
+      }
+      vcJoinTimes.delete(userId);
+    }
+  }
+});
+
 // ── Message handler ────────────────────────────────────────
 client.on("messageCreate", async (msg) => {
-  if (msg.author.bot || !msg.content.startsWith(PREFIX)) return;
+  if (msg.author.bot) return;
+
+  // Earn kittens for every message (before command check)
+  if (!msg.author.bot) {
+    const userId = msg.author.id;
+    const name = msg.member?.displayName ?? msg.author.username;
+    if (!db.users[userId]) db.users[userId] = { name, points: 0, count: 0, lastPoopTime: null, allTimeCount: 0, allTimePoints: 0, weeklyWins: 0, kittens: 0 };
+    db.users[userId].name = name;
+    db.users[userId].kittens = (db.users[userId].kittens ?? 0) + KITTENS_PER_MESSAGE;
+    saveData(db);
+  }
+
+  if (!msg.content.startsWith(PREFIX)) return;
 
   const args = msg.content.slice(PREFIX.length).trim().split(/\s+/);
   const cmd = args.shift().toLowerCase();
@@ -393,6 +509,178 @@ client.on("messageCreate", async (msg) => {
     await msg.channel.send({ embeds: [embed] });
   }
 
+  // ── !kittens ─────────────────────────────────────────────
+  else if (cmd === "kittens" || cmd === "balance" || cmd === "bal") {
+    const userId = msg.author.id;
+    const target = msg.mentions.users.first();
+    const lookupId = target?.id ?? userId;
+    const lookupName = target?.username ?? msg.author.username;
+    const bal = getKittens(lookupId);
+    await msg.reply(`🐱 **${lookupName}** has **${bal.toLocaleString()} kittens**`);
+  }
+
+  // ── !kittenboard ─────────────────────────────────────────
+  else if (cmd === "kittenboard" || cmd === "kb") {
+    await msg.guild?.members.fetch().catch(() => {});
+    const sorted = Object.entries(db.users)
+      .filter(([, u]) => (u.kittens ?? 0) > 0)
+      .sort(([, a], [, b]) => (b.kittens ?? 0) - (a.kittens ?? 0))
+      .slice(0, 10);
+
+    const medals = ["🥇", "🥈", "🥉"];
+    const rows = sorted.map(([id, info], i) => {
+      const member = msg.guild?.members.cache.get(id);
+      const name = member?.displayName ?? info.name ?? `User ${id}`;
+      const medal = medals[i] ?? `**${i + 1}.**`;
+      return `${medal} **${name}** — ${(info.kittens ?? 0).toLocaleString()} 🐱`;
+    });
+
+    const embed = new EmbedBuilder()
+      .setTitle("🐱  Kitten Rich List")
+      .setDescription(rows.length ? rows.join("\n") : "*Nobody has kittens yet — send some messages!*")
+      .setColor(0xff69b4)
+      .setFooter({ text: "Earn 5 kittens per message · 5 kittens per minute in VC" })
+      .setTimestamp();
+
+    await msg.channel.send({ embeds: [embed] });
+  }
+
+  // ── !blackjack ───────────────────────────────────────────
+  else if (cmd === "blackjack" || cmd === "bj") {
+    const channelId = msg.channel.id;
+    if (activeGames.has(channelId)) {
+      return msg.reply("❌ There's already a game running in this channel! Finish it first.");
+    }
+
+    const bet = parseInt(args[0]);
+    if (isNaN(bet) || bet <= 0) return msg.reply("Usage: `!blackjack <bet>` or `!blackjack @user <bet>`");
+
+    const p1 = msg.author.id;
+    const p1Name = msg.member?.displayName ?? msg.author.username;
+    const p1Kittens = getKittens(p1);
+    if (p1Kittens < bet) return msg.reply(`❌ You only have **${p1Kittens} 🐱 kittens** — not enough to bet ${bet}!`);
+
+    const mentionedUser = msg.mentions.users.first();
+
+    // vs Bot
+    if (!mentionedUser) {
+      const deck = makeDeck();
+      const hands = { [p1]: [deck.pop(), deck.pop()] };
+      const dealerHand = [deck.pop(), deck.pop()];
+      removeKittens(p1, bet);
+
+      const game = { p1, p1Name, p2: null, p2Name: null, bet, deck, hands, dealerHand, turn: p1, stood: new Set(), vsBot: true };
+      activeGames.set(channelId, game);
+
+      const embed = buildGameEmbed(game);
+      await msg.channel.send({ content: `🃏 **${p1Name}** is playing Blackjack vs the dealer for **${bet} 🐱 kittens**!`, embeds: [embed] });
+
+      // Auto-resolve blackjack
+      if (handValue(hands[p1]) === 21) {
+        return resolveBlackjack(msg.channel, channelId);
+      }
+      return;
+    }
+
+    // vs Player
+    const p2 = mentionedUser.id;
+    if (p2 === p1) return msg.reply("❌ You can't challenge yourself!");
+    if (p2 === client.user.id) return msg.reply("❌ Use `!blackjack <bet>` (no mention) to play against the dealer!");
+
+    const betArg = parseInt(args[1]);
+    if (isNaN(betArg) || betArg <= 0) return msg.reply("Usage: `!blackjack @user <bet>`");
+    const actualBet = betArg;
+
+    const p2Kittens = getKittens(p2);
+    if (p1Kittens < actualBet) return msg.reply(`❌ You only have **${p1Kittens} 🐱 kittens**!`);
+    if (p2Kittens < actualBet) return msg.reply(`❌ <@${p2}> only has **${p2Kittens} 🐱 kittens** and can't cover that bet!`);
+
+    // Send challenge and wait 30s
+    const challengeMsg = await msg.channel.send(`🃏 <@${p2}> — **${p1Name}** challenges you to Blackjack for **${actualBet} 🐱 kittens**!\nType \`!accept\` within 30 seconds to play!`);
+
+    const pendingGames = msg.client.pendingGames ?? (msg.client.pendingGames = new Map());
+    pendingGames.set(channelId, { p1, p1Name, p2, bet: actualBet, expiresAt: Date.now() + 30000 });
+
+    setTimeout(() => {
+      if (pendingGames.has(channelId)) {
+        pendingGames.delete(channelId);
+        challengeMsg.reply("⏰ Challenge expired — no response in 30 seconds.").catch(() => {});
+      }
+    }, 30000);
+  }
+
+  // ── !accept ──────────────────────────────────────────────
+  else if (cmd === "accept") {
+    const channelId = msg.channel.id;
+    const pendingGames = msg.client.pendingGames;
+    const pending = pendingGames?.get(channelId);
+
+    if (!pending) return msg.reply("❌ No pending challenge in this channel.");
+    if (msg.author.id !== pending.p2) return msg.reply("❌ This challenge isn't for you!");
+    if (Date.now() > pending.expiresAt) {
+      pendingGames.delete(channelId);
+      return msg.reply("⏰ That challenge already expired.");
+    }
+
+    pendingGames.delete(channelId);
+
+    const { p1, p1Name, p2, bet } = pending;
+    const p2Name = msg.member?.displayName ?? msg.author.username;
+
+    removeKittens(p1, bet);
+    removeKittens(p2, bet);
+
+    const deck = makeDeck();
+    const hands = {
+      [p1]: [deck.pop(), deck.pop()],
+      [p2]: [deck.pop(), deck.pop()],
+    };
+    const dealerHand = [deck.pop(), deck.pop()];
+    const game = { p1, p1Name, p2, p2Name, bet, deck, hands, dealerHand, turn: p1, stood: new Set(), vsBot: false };
+    activeGames.set(channelId, game);
+
+    const embed = buildGameEmbed(game);
+    await msg.channel.send({ content: `🃏 **${p1Name}** vs **${p2Name}** — **${bet} 🐱 kittens** each!`, embeds: [embed] });
+  }
+
+  // ── !hit ─────────────────────────────────────────────────
+  else if (cmd === "hit") {
+    const channelId = msg.channel.id;
+    const game = activeGames.get(channelId);
+    if (!game) return;
+    if (msg.author.id !== game.turn) return msg.reply("❌ It's not your turn!");
+
+    const card = game.deck.pop();
+    game.hands[game.turn].push(card);
+    const val = handValue(game.hands[game.turn]);
+
+    if (val > 21) {
+      // Bust
+      const embed = buildGameEmbed(game, true);
+      await msg.channel.send({ content: `💥 **${game.turn === game.p1 ? game.p1Name : game.p2Name}** busted with **${val}**!`, embeds: [embed] });
+      return resolveBlackjack(msg.channel, channelId);
+    } else if (val === 21) {
+      await msg.channel.send(`✨ **${game.turn === game.p1 ? game.p1Name : game.p2Name}** hit 21! Standing automatically.`);
+      game.stood.add(game.turn);
+      advanceTurn(msg.channel, channelId);
+    } else {
+      const embed = buildGameEmbed(game);
+      await msg.channel.send({ embeds: [embed] });
+    }
+  }
+
+  // ── !stand ───────────────────────────────────────────────
+  else if (cmd === "stand") {
+    const channelId = msg.channel.id;
+    const game = activeGames.get(channelId);
+    if (!game) return;
+    if (msg.author.id !== game.turn) return msg.reply("❌ It's not your turn!");
+
+    game.stood.add(game.turn);
+    await msg.channel.send(`🛑 **${game.turn === game.p1 ? game.p1Name : game.p2Name}** stands at **${handValue(game.hands[game.turn])}**.`);
+    advanceTurn(msg.channel, channelId);
+  }
+
   // ── !poophelp ────────────────────────────────────────────
   else if (cmd === "poophelp") {
     const windowList = activeDoubleWindows
@@ -408,7 +696,12 @@ client.on("messageCreate", async (msg) => {
         { name: "`!mystats`", value: "Your personal stats — weekly and all-time" },
         { name: "`!doublepoints` / `!dp`", value: "Check if double points are active" },
         { name: "`!poopfacts`", value: "Get a random fact about poop" },
-        { name: "⚡ Quick pooper bonus", value: "Poop within 2 hours of your last poop to earn an extra +1.5 points!" },
+        { name: "`!kittens` / `!bal`", value: "Check your kitten balance (or `!kittens @user`)" },
+        { name: "`!kittenboard` / `!kb`", value: "Kitten rich list" },
+        { name: "`!blackjack <bet>`", value: "Play blackjack vs the dealer" },
+        { name: "`!blackjack @user <bet>`", value: "Challenge someone to 1v1 blackjack" },
+        { name: "`!hit` / `!stand`", value: "Blackjack moves during your turn" },
+        { name: "🐱 Earning kittens", value: "5 kittens per message · 5 kittens per minute in VC" },
         { name: "Today's double-point windows", value: windowList || "None today" },
         {
           name: "👑 The Ultimate Shitter",
@@ -421,6 +714,78 @@ client.on("messageCreate", async (msg) => {
     await msg.channel.send({ embeds: [embed] });
   }
 });
+
+// ── Blackjack turn logic ───────────────────────────────────
+function advanceTurn(channel, channelId) {
+  const game = activeGames.get(channelId);
+  if (!game) return;
+
+  // If vs bot or both players stood, resolve
+  if (game.vsBot || (game.stood.has(game.p1) && game.stood.has(game.p2))) {
+    return resolveBlackjack(channel, channelId);
+  }
+
+  // Switch to other player if they haven't stood
+  if (game.turn === game.p1 && !game.stood.has(game.p2)) {
+    game.turn = game.p2;
+    const embed = buildGameEmbed(game);
+    channel.send({ content: `➡️ **${game.p2Name}**'s turn!`, embeds: [embed] });
+  } else {
+    resolveBlackjack(channel, channelId);
+  }
+}
+
+async function resolveBlackjack(channel, channelId) {
+  const game = activeGames.get(channelId);
+  if (!game) return;
+  activeGames.delete(channelId);
+
+  // Dealer draws until 17+
+  while (handValue(game.dealerHand) < 17) {
+    game.dealerHand.push(game.deck.pop());
+  }
+  const dealerVal = handValue(game.dealerHand);
+
+  const results = [];
+
+  const resolvePlayer = (playerId, playerName) => {
+    const playerVal = handValue(game.hands[playerId]);
+    const busted = playerVal > 21;
+    const dealerBusted = dealerVal > 21;
+
+    let outcome, kittensChange;
+    if (busted) {
+      outcome = `💥 **${playerName}** busted (${playerVal}) — loses **${game.bet} 🐱**`;
+      kittensChange = 0; // already deducted
+    } else if (dealerBusted || playerVal > dealerVal) {
+      outcome = `🎉 **${playerName}** wins! (${playerVal} vs dealer ${dealerVal}) — wins **${game.bet * 2} 🐱**`;
+      addKittens(playerId, game.bet * 2);
+    } else if (playerVal === dealerVal) {
+      outcome = `🤝 **${playerName}** pushes (${playerVal}) — bet returned`;
+      addKittens(playerId, game.bet);
+    } else {
+      outcome = `😔 **${playerName}** loses (${playerVal} vs dealer ${dealerVal}) — loses **${game.bet} 🐱**`;
+    }
+    results.push(outcome);
+  };
+
+  resolvePlayer(game.p1, game.p1Name);
+  if (game.p2) resolvePlayer(game.p2, game.p2Name);
+
+  const embed = new EmbedBuilder()
+    .setTitle("🃏  Blackjack — Results")
+    .setDescription([
+      `🃏 **Dealer:** ${formatHand(game.dealerHand)} **(${dealerVal})**`,
+      `😺 **${game.p1Name}:** ${formatHand(game.hands[game.p1])} **(${handValue(game.hands[game.p1])})**`,
+      game.p2 ? `😺 **${game.p2Name}:** ${formatHand(game.hands[game.p2])} **(${handValue(game.hands[game.p2])})**` : null,
+      ``,
+      ...results,
+    ].filter(Boolean).join("\n"))
+    .setColor(0xe74c3c)
+    .setTimestamp();
+
+  await channel.send({ embeds: [embed] });
+}
 
 // ── Ready ──────────────────────────────────────────────────
 client.once("ready", () => {
