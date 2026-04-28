@@ -1,0 +1,16 @@
+{
+  "name": "ultimate-shitter",
+  "version": "1.0.0",
+  "description": "The Ultimate Shitter Discord bot",
+  "main": "poopbot.js",
+  "scripts": {
+    "start": "node poopbot.js"
+  },
+  "engines": {
+    "node": ">=16.9.0"
+  },
+  "dependencies": {
+    "discord.js": "^14.0.0",
+    "node-cron": "^3.0.0"
+  }
+}
