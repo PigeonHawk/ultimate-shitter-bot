@@ -769,6 +769,9 @@ client.on("messageCreate", async (msg) => {
     await msg.reply(`✅ Updated **${targetUser.username}**'s kittens from **${oldKittens}** to **${newAmount}** 🐱`);
     await msg.delete().catch(() => {});
   }
+
+  // ── !poophelp ────────────────────────────────────────────
+  else if (cmd === "poophelp") {
     const windowList = activeDoubleWindows
       .map(([s, e]) => `• ${s}:00 – ${e}:00`)
       .join("\n");
