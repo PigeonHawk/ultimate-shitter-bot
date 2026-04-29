@@ -326,7 +326,7 @@ function canEarnKittens(userId, content) {
 
   if (isDuplicate || isTooShort) {
     // Freeze for 5 minutes
-    tracker.frozenUntil = now + 5 * 60 * 1000;
+    tracker.frozenUntil = now + 2 * 60 * 1000;
     recentMessages.set(userId, tracker);
     return { earn: false, spam: true, frozen: false };
   }
@@ -338,6 +338,9 @@ function canEarnKittens(userId, content) {
 }
 
 
+
+// ── Race state ─────────────────────────────────────────────
+const activeRaces = new Map();
 
 // ── Bot client ─────────────────────────────────────────────
 const client = new Client({
@@ -436,7 +439,7 @@ client.on("messageCreate", async (msg) => {
     saveData(db);
     await msg.reply(
       `🚨 **SPAM DETECTED, ${userName}!**\n` +
-      `You've been deducted **300 🐱 kittens** and your kitten earning is **frozen for 5 minutes**.\n` +
+      `You've been deducted **300 🐱 kittens** and your kitten earning is **frozen for 2 minutes**.\n` +
       `Stop sending repeated or short messages to farm kittens!`
     ).catch(() => {});
   }
