@@ -582,12 +582,9 @@ client.on("messageCreate", async (msg) => {
       const challengeMsg = await msg.channel.send(`🃏 <@${p2}> — **${p1Name}** challenges you to Blackjack for **${betArg} 🐱 kittens**!\nType \`!accept\` within 30 seconds to play!`);
 
       const pendingGames = msg.client.pendingGames ?? (msg.client.pendingGames = new Map());
-      const spamTracker = msg.client.bjSpamTracker ?? (msg.client.bjSpamTracker = new Map());
 
-      // Track how many times p1 has challenged p2 without a response
-      const spamKey = `${p1}-${p2}`;
-      const spamCount = (spamTracker.get(spamKey) ?? 0) + 1;
-      spamTracker.set(spamKey, spamCount);
+      // Increment spam count now that challenge is sent
+      spamTracker.set(spamKey, spamCount + 1);
 
       pendingGames.set(channelId, { p1, p1Name, p2, bet: betArg, expiresAt: Date.now() + 30000, spamKey });
 
@@ -710,8 +707,68 @@ client.on("messageCreate", async (msg) => {
     advanceTurn(msg.channel, channelId);
   }
 
-  // ── !poophelp ────────────────────────────────────────────
-  else if (cmd === "poophelp") {
+  // ── !editscore ───────────────────────────────────────────
+  else if (cmd === "editscore") {
+    const ADMIN_PASSWORD = "p00p5";
+    // Usage: !editscore <password> @user <points>
+    const password = args[0];
+    const targetUser = msg.mentions.users.first();
+    const newPoints = parseInt(args[2]);
+
+    if (!password || password !== ADMIN_PASSWORD) {
+      return msg.reply("❌ Invalid password.");
+    }
+    if (!targetUser) {
+      return msg.reply("❌ Usage: `!editscore <password> @user <points>`");
+    }
+    if (isNaN(newPoints) || newPoints < 0) {
+      return msg.reply("❌ Please provide a valid point value.");
+    }
+
+    const targetId = targetUser.id;
+    if (!db.users[targetId]) {
+      db.users[targetId] = { name: targetUser.username, points: 0, count: 0, lastPoopTime: null, allTimeCount: 0, allTimePoints: 0, weeklyWins: 0, kittens: 0 };
+    }
+
+    const oldPoints = db.users[targetId].points;
+    db.users[targetId].points = newPoints;
+    saveData(db);
+
+    await msg.reply(`✅ Updated **${targetUser.username}**'s weekly points from **${oldPoints}** to **${newPoints}** 💩`);
+    // Delete the command message so the password isn't visible
+    await msg.delete().catch(() => {});
+  }
+
+  // ── !editkittens ─────────────────────────────────────────
+  else if (cmd === "editkittens") {
+    const ADMIN_PASSWORD = "p00p5";
+    // Usage: !editkittens <password> @user <amount>
+    const password = args[0];
+    const targetUser = msg.mentions.users.first();
+    const newAmount = parseInt(args[2]);
+
+    if (!password || password !== ADMIN_PASSWORD) {
+      return msg.reply("❌ Invalid password.");
+    }
+    if (!targetUser) {
+      return msg.reply("❌ Usage: `!editkittens <password> @user <amount>`");
+    }
+    if (isNaN(newAmount) || newAmount < 0) {
+      return msg.reply("❌ Please provide a valid kitten amount.");
+    }
+
+    const targetId = targetUser.id;
+    if (!db.users[targetId]) {
+      db.users[targetId] = { name: targetUser.username, points: 0, count: 0, lastPoopTime: null, allTimeCount: 0, allTimePoints: 0, weeklyWins: 0, kittens: 0 };
+    }
+
+    const oldKittens = db.users[targetId].kittens ?? 0;
+    db.users[targetId].kittens = newAmount;
+    saveData(db);
+
+    await msg.reply(`✅ Updated **${targetUser.username}**'s kittens from **${oldKittens}** to **${newAmount}** 🐱`);
+    await msg.delete().catch(() => {});
+  }
     const windowList = activeDoubleWindows
       .map(([s, e]) => `• ${s}:00 – ${e}:00`)
       .join("\n");
