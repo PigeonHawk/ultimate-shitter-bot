@@ -23,7 +23,9 @@ const fs = require("fs");
 // ── Config ─────────────────────────────────────────────────
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const PREFIX = "!";
-const DATA_FILE = "./poopdata.json";
+const DATA_FILE = process.env.RAILWAY_VOLUME_MOUNT_PATH 
+  ? `${process.env.RAILWAY_VOLUME_MOUNT_PATH}/poopdata.json`
+  : "./poopdata.json";
 const CHAMPION_ROLE_NAME = "The Ultimate Shitter"; // must match your Discord role exactly
 
 // Double-points windows  [startHour, endHour]  (24h, server local time)
@@ -770,8 +772,71 @@ client.on("messageCreate", async (msg) => {
     await msg.delete().catch(() => {});
   }
 
-  // ── !poophelp ────────────────────────────────────────────
-  else if (cmd === "poophelp") {
+  // ── !race ────────────────────────────────────────────────
+  else if (cmd === "race") {
+    const channelId = msg.channel.id;
+    if (activeRaces.has(channelId)) {
+      return msg.reply("❌ A race is already running in this channel!");
+    }
+
+    const initiatorId = msg.author.id;
+    const initiatorName = msg.member?.displayName ?? msg.author.username;
+    const participants = new Map(); // userId -> displayName
+    participants.set(initiatorId, initiatorName);
+
+    const race = { phase: "joining", participants, channelId, word: null, startTime: null, finished: new Set() };
+    activeRaces.set(channelId, race);
+
+    const embed = new EmbedBuilder()
+      .setTitle("⌨️  Type Race — Joining Phase")
+      .setDescription(`**${initiatorName}** started a type race!\nType \`!join\` to enter — race starts in **30 seconds**!`)
+      .setColor(0x3498db)
+      .setFooter({ text: "Winner gets +25 🐱 kittens · Losers lose 25 🐱 · Misspelling = instant loss" });
+
+    await msg.channel.send({ embeds: [embed] });
+
+    // Start race after 30s
+    setTimeout(async () => {
+      const currentRace = activeRaces.get(channelId);
+      if (!currentRace || currentRace.phase !== "joining") return;
+
+      if (currentRace.participants.size < 2) {
+        activeRaces.delete(channelId);
+        return msg.channel.send("❌ Not enough players joined — race cancelled! (Need at least 2)");
+      }
+
+      const word = getRaceWord();
+      currentRace.word = word;
+      currentRace.phase = "racing";
+      currentRace.startTime = Date.now();
+
+      const playerList = [...currentRace.participants.values()].map(n => `• ${n}`).join("\n");
+      const raceEmbed = new EmbedBuilder()
+        .setTitle("⌨️  Type Race — GO!")
+        .setDescription(`**Type this word as fast as you can:**\n\n# \`${word}\`\n\n**Players:**\n${playerList}`)
+        .setColor(0xe74c3c)
+        .setFooter({ text: "First to type it correctly wins! Misspelling = instant loss!" });
+
+      await msg.channel.send({ embeds: [raceEmbed] });
+    }, 30000);
+  }
+
+  // ── !join (race) ─────────────────────────────────────────
+  else if (cmd === "join") {
+    const channelId = msg.channel.id;
+    const race = activeRaces.get(channelId);
+
+    if (!race || race.phase !== "joining") {
+      return msg.reply("❌ No race is in the joining phase right now. Start one with `!race`!");
+    }
+    if (race.participants.has(msg.author.id)) {
+      return msg.reply("❌ You're already in the race!");
+    }
+
+    const name = msg.member?.displayName ?? msg.author.username;
+    race.participants.set(msg.author.id, name);
+    await msg.reply(`✅ **${name}** joined the race! (${race.participants.size} players so far)`);
+  }
     const windowList = activeDoubleWindows
       .map(([s, e]) => `• ${s}:00 – ${e}:00`)
       .join("\n");
@@ -785,6 +850,7 @@ client.on("messageCreate", async (msg) => {
         { name: "`!mystats`", value: "Your personal stats — weekly and all-time" },
         { name: "`!doublepoints` / `!dp`", value: "Check if double points are active" },
         { name: "`!poopfacts`", value: "Get a random fact about poop" },
+        { name: "`!race`", value: "Start a type race — 30s to join with `!join`" },
         { name: "`!kittens` / `!bal`", value: "Check your kitten balance (or `!kittens @user`)" },
         { name: "`!kittenboard` / `!kb`", value: "Kitten rich list" },
         { name: "`!blackjack <bet>`", value: "Play blackjack vs the dealer" },
@@ -802,9 +868,61 @@ client.on("messageCreate", async (msg) => {
 
     await msg.channel.send({ embeds: [embed] });
   }
-});
 
-// ── Blackjack turn logic ───────────────────────────────────
+  // ── Race word detection ──────────────────────────────────
+  const channelRace = activeRaces.get(msg.channel.id);
+  if (channelRace && channelRace.phase === "racing" && channelRace.participants.has(msg.author.id)) {
+    const typed = msg.content.trim().toLowerCase();
+    const target = channelRace.word.toLowerCase();
+    const userId = msg.author.id;
+    const userName = channelRace.participants.get(userId);
+
+    if (channelRace.finished.has(userId)) return;
+
+    if (typed === target) {
+      channelRace.finished.add(userId);
+      const elapsed = ((Date.now() - channelRace.startTime) / 1000).toFixed(2);
+      const isWinner = channelRace.finished.size === 1;
+
+      if (isWinner) {
+        addKittens(userId, 25);
+        const losers = [];
+        for (const [pid, pname] of channelRace.participants) {
+          if (pid !== userId) {
+            const bal = getKittens(pid);
+            removeKittens(pid, Math.min(25, bal));
+            losers.push(pname);
+          }
+        }
+        activeRaces.delete(msg.channel.id);
+
+        const embed = new EmbedBuilder()
+          .setTitle("⌨️  Race Over!")
+          .setDescription(
+            `🏆 **${userName}** wins in **${elapsed}s**! +25 🐱 kittens!\n` +
+            (losers.length ? `😔 **${losers.join(", ")}** lose 25 🐱 kittens each.` : "")
+          )
+          .setColor(0x2ecc71)
+          .setTimestamp();
+
+        await msg.channel.send({ embeds: [embed] });
+      }
+    } else if (typed.length >= channelRace.word.length) {
+      // Misspelled
+      if (!channelRace.finished.has(userId)) {
+        channelRace.finished.add(userId);
+        const bal = getKittens(userId);
+        removeKittens(userId, Math.min(25, bal));
+        await msg.channel.send(`❌ **${userName}** misspelled \`${channelRace.word}\` and loses **25 🐱 kittens**!`);
+
+        if (channelRace.finished.size >= channelRace.participants.size) {
+          activeRaces.delete(msg.channel.id);
+          await msg.channel.send("💀 Everyone misspelled — no winner this race!");
+        }
+      }
+    }
+  }
+});
 function advanceTurn(channel, channelId) {
   const game = activeGames.get(channelId);
   if (!game) return;
@@ -876,7 +994,44 @@ async function resolveBlackjack(channel, channelId) {
   await channel.send({ embeds: [embed] });
 }
 
-// ── Ready ──────────────────────────────────────────────────
+// ── Type Race ──────────────────────────────────────────────
+const activeRaces = new Map(); // channelId -> race state
+
+const RACE_WORDS = [
+  "abbreviation", "abomination", "abstraction", "accomplishment", "accountability",
+  "acknowledgment", "acquaintance", "administration", "advertisement", "alliteration",
+  "ameliorate", "anachronism", "apprehension", "approximately", "assassination",
+  "authentication", "bibliography", "bureaucratic", "camouflage", "catastrophic",
+  "circumstantial", "clandestine", "collaborative", "commemorate", "communication",
+  "compensation", "comprehension", "concatenation", "confidential", "congratulations",
+  "conscientious", "contemporary", "continuously", "controversial", "crystallization",
+  "deliberation", "demonstration", "deterioration", "determination", "disenfranchise",
+  "disorientation", "documentation", "electromagnetic", "embarrassment", "encouragement",
+  "entertainment", "entrepreneurial", "environmental", "establishment", "exaggeration",
+  "exasperation", "experimentation", "exhilaration", "extravaganza", "fluorescence",
+  "fortunately", "fundamentally", "gesticulation", "globalization", "hallucination",
+  "hypothetically", "identification", "illumination", "imagination", "implementation",
+  "inappropriate", "inconvenience", "independently", "infrastructure", "initialization",
+  "instantaneous", "interpretation", "investigation", "irresponsible", "juxtaposition",
+  "kaleidoscope", "knowledgeable", "legitimately", "magnification", "manifestation",
+  "manipulation", "measurability", "Mediterranean", "miscellaneous", "misunderstand",
+  "modernization", "multiplication", "municipality", "negotiation", "nevertheless",
+  "nonchalantly", "occasionally", "overwhelming", "paraphernalia", "parliamentarian",
+  "participation", "particularly", "perpendicular", "philosophical", "physiological",
+  "predominantly", "preposterous", "prioritization", "procrastinate", "pronunciation",
+  "qualification", "questionnaire", "rationalization", "recommendation", "reconciliation",
+  "refrigerator", "reincarnation", "relationships", "remembrance", "representation",
+  "responsibility", "simultaneously", "sophisticated", "specification", "spontaneously",
+  "standardization", "straightforward", "subordination", "sustainability", "telecommunication",
+  "unfortunately", "unpredictable", "unprecedented", "unquestionable", "vulnerability",
+  "wholeheartedly", "xylophonist", "zealousness", "accomplishments", "disestablishment"
+];
+
+function getRaceWord() {
+  return RACE_WORDS[Math.floor(Math.random() * RACE_WORDS.length)];
+}
+
+
 client.once("ready", () => {
   console.log(`[UltimateShitter] Logged in as ${client.user.tag} 💩`);
   client.user.setActivity("the toilet 🚽", { type: 3 });
