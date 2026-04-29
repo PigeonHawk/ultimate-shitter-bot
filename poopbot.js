@@ -552,6 +552,63 @@ client.on("messageCreate", async (msg) => {
       return msg.reply("❌ There's already a game running in this channel! Finish it first.");
     }
 
+    const mentionedUser = msg.mentions.users.first();
+
+    // vs Player: !blackjack @user <bet>
+    if (mentionedUser) {
+      const betArg = parseInt(args[1] ?? args[0]);
+      if (isNaN(betArg) || betArg <= 0) return msg.reply("Usage: `!blackjack @user <bet>`");
+
+      const p1 = msg.author.id;
+      const p1Name = msg.member?.displayName ?? msg.author.username;
+      const p2 = mentionedUser.id;
+
+      if (p2 === p1) return msg.reply("❌ You can't challenge yourself!");
+      if (p2 === client.user.id) return msg.reply("❌ Use `!blackjack <bet>` (no mention) to play against the dealer!");
+
+      const p1Kittens = getKittens(p1);
+      const p2Kittens = getKittens(p2);
+      if (p1Kittens < betArg) return msg.reply(`❌ You only have **${p1Kittens} 🐱 kittens**!`);
+      if (p2Kittens < betArg) return msg.reply(`❌ <@${p2}> only has **${p2Kittens} 🐱 kittens** and can't cover that bet!`);
+
+      // Spam protection — max 3 unanswered challenges to the same person
+      const spamTracker = msg.client.bjSpamTracker ?? (msg.client.bjSpamTracker = new Map());
+      const spamKey = `${p1}-${p2}`;
+      const spamCount = spamTracker.get(spamKey) ?? 0;
+      if (spamCount >= 3) {
+        return msg.reply(`❌ You've already sent **3 unanswered challenges** to <@${p2}>! Wait for them to respond to one first.`);
+      }
+
+      const challengeMsg = await msg.channel.send(`🃏 <@${p2}> — **${p1Name}** challenges you to Blackjack for **${betArg} 🐱 kittens**!\nType \`!accept\` within 30 seconds to play!`);
+
+      const pendingGames = msg.client.pendingGames ?? (msg.client.pendingGames = new Map());
+      const spamTracker = msg.client.bjSpamTracker ?? (msg.client.bjSpamTracker = new Map());
+
+      // Track how many times p1 has challenged p2 without a response
+      const spamKey = `${p1}-${p2}`;
+      const spamCount = (spamTracker.get(spamKey) ?? 0) + 1;
+      spamTracker.set(spamKey, spamCount);
+
+      pendingGames.set(channelId, { p1, p1Name, p2, bet: betArg, expiresAt: Date.now() + 30000, spamKey });
+
+      setTimeout(() => {
+        if (pendingGames.has(channelId)) {
+          pendingGames.delete(channelId);
+          // Penalty: remove 1 kitten from the challenged user and give it to the challenger
+          const p2Bal = getKittens(p2);
+          if (p2Bal > 0) {
+            removeKittens(p2, 1);
+            addKittens(p1, 1);
+            challengeMsg.reply(`⏰ Challenge expired — <@${p2}> didn't respond and lost **1 🐱 kitten** which was given to **${p1Name}**!`).catch(() => {});
+          } else {
+            challengeMsg.reply(`⏰ Challenge expired — no response in 30 seconds.`).catch(() => {});
+          }
+        }
+      }, 30000);
+      return;
+    }
+
+    // vs Bot: !blackjack <bet>
     const bet = parseInt(args[0]);
     if (isNaN(bet) || bet <= 0) return msg.reply("Usage: `!blackjack <bet>` or `!blackjack @user <bet>`");
 
@@ -560,53 +617,21 @@ client.on("messageCreate", async (msg) => {
     const p1Kittens = getKittens(p1);
     if (p1Kittens < bet) return msg.reply(`❌ You only have **${p1Kittens} 🐱 kittens** — not enough to bet ${bet}!`);
 
-    const mentionedUser = msg.mentions.users.first();
+    const deck = makeDeck();
+    const hands = { [p1]: [deck.pop(), deck.pop()] };
+    const dealerHand = [deck.pop(), deck.pop()];
+    removeKittens(p1, bet);
 
-    // vs Bot
-    if (!mentionedUser) {
-      const deck = makeDeck();
-      const hands = { [p1]: [deck.pop(), deck.pop()] };
-      const dealerHand = [deck.pop(), deck.pop()];
-      removeKittens(p1, bet);
+    const game = { p1, p1Name, p2: null, p2Name: null, bet, deck, hands, dealerHand, turn: p1, stood: new Set(), vsBot: true };
+    activeGames.set(channelId, game);
 
-      const game = { p1, p1Name, p2: null, p2Name: null, bet, deck, hands, dealerHand, turn: p1, stood: new Set(), vsBot: true };
-      activeGames.set(channelId, game);
+    const embed = buildGameEmbed(game);
+    await msg.channel.send({ content: `🃏 **${p1Name}** is playing Blackjack vs the dealer for **${bet} 🐱 kittens**!`, embeds: [embed] });
 
-      const embed = buildGameEmbed(game);
-      await msg.channel.send({ content: `🃏 **${p1Name}** is playing Blackjack vs the dealer for **${bet} 🐱 kittens**!`, embeds: [embed] });
-
-      // Auto-resolve blackjack
-      if (handValue(hands[p1]) === 21) {
-        return resolveBlackjack(msg.channel, channelId);
-      }
-      return;
+    if (handValue(hands[p1]) === 21) {
+      return resolveBlackjack(msg.channel, channelId);
     }
-
-    // vs Player
-    const p2 = mentionedUser.id;
-    if (p2 === p1) return msg.reply("❌ You can't challenge yourself!");
-    if (p2 === client.user.id) return msg.reply("❌ Use `!blackjack <bet>` (no mention) to play against the dealer!");
-
-    const betArg = parseInt(args[1]);
-    if (isNaN(betArg) || betArg <= 0) return msg.reply("Usage: `!blackjack @user <bet>`");
-    const actualBet = betArg;
-
-    const p2Kittens = getKittens(p2);
-    if (p1Kittens < actualBet) return msg.reply(`❌ You only have **${p1Kittens} 🐱 kittens**!`);
-    if (p2Kittens < actualBet) return msg.reply(`❌ <@${p2}> only has **${p2Kittens} 🐱 kittens** and can't cover that bet!`);
-
-    // Send challenge and wait 30s
-    const challengeMsg = await msg.channel.send(`🃏 <@${p2}> — **${p1Name}** challenges you to Blackjack for **${actualBet} 🐱 kittens**!\nType \`!accept\` within 30 seconds to play!`);
-
-    const pendingGames = msg.client.pendingGames ?? (msg.client.pendingGames = new Map());
-    pendingGames.set(channelId, { p1, p1Name, p2, bet: actualBet, expiresAt: Date.now() + 30000 });
-
-    setTimeout(() => {
-      if (pendingGames.has(channelId)) {
-        pendingGames.delete(channelId);
-        challengeMsg.reply("⏰ Challenge expired — no response in 30 seconds.").catch(() => {});
-      }
-    }, 30000);
+    return;
   }
 
   // ── !accept ──────────────────────────────────────────────
@@ -623,6 +648,10 @@ client.on("messageCreate", async (msg) => {
     }
 
     pendingGames.delete(channelId);
+
+    // Clear spam tracker since p2 responded
+    const spamTracker = msg.client.bjSpamTracker ?? (msg.client.bjSpamTracker = new Map());
+    if (pending.spamKey) spamTracker.delete(pending.spamKey);
 
     const { p1, p1Name, p2, bet } = pending;
     const p2Name = msg.member?.displayName ?? msg.author.username;
