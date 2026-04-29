@@ -428,7 +428,8 @@ client.on("messageCreate", async (msg) => {
 
   // Earn kittens for every message (anti-spam protected)
   ensureUser(userId, userName);
-  const kittenCheck = canEarnKittens(userId, msg.content);
+  const isCommand = msg.content.startsWith(PREFIX);
+  const kittenCheck = isCommand ? { earn: true, spam: false, frozen: false } : canEarnKittens(userId, msg.content);
   if (kittenCheck.earn) {
     db.users[userId].kittens = (db.users[userId].kittens ?? 0) + KITTENS_PER_MESSAGE;
     saveData(db);
