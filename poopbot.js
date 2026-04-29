@@ -300,8 +300,44 @@ async function resolveBlackjack(channel, channelId) {
   await channel.send({ embeds: [embed] });
 }
 
-// ── Race state ─────────────────────────────────────────────
-const activeRaces = new Map();
+// ── Anti-spam tracking ─────────────────────────────────────
+const recentMessages = new Map(); // userId -> { lastMessage, messageCount, windowStart, frozenUntil }
+
+function canEarnKittens(userId, content) {
+  const now = Date.now();
+  const ONE_MINUTE = 60 * 1000;
+  const tracker = recentMessages.get(userId) ?? { lastMessage: null, messageCount: 0, windowStart: now, frozenUntil: 0 };
+
+  // If frozen, block earning silently
+  if (tracker.frozenUntil && now < tracker.frozenUntil) {
+    recentMessages.set(userId, tracker);
+    return { earn: false, spam: false, frozen: true };
+  }
+
+  // Reset window every minute (only if not frozen)
+  if (now - tracker.windowStart > ONE_MINUTE) {
+    tracker.messageCount = 0;
+    tracker.windowStart = now;
+  }
+
+  // Check for spam: duplicate message or short message after 5
+  const isDuplicate = tracker.lastMessage && tracker.lastMessage.toLowerCase() === content.toLowerCase();
+  const isTooShort = tracker.messageCount >= 5 && content.trim().length < 5;
+
+  if (isDuplicate || isTooShort) {
+    // Freeze for 5 minutes
+    tracker.frozenUntil = now + 5 * 60 * 1000;
+    recentMessages.set(userId, tracker);
+    return { earn: false, spam: true, frozen: false };
+  }
+
+  tracker.lastMessage = content;
+  tracker.messageCount += 1;
+  recentMessages.set(userId, tracker);
+  return { earn: true, spam: false, frozen: false };
+}
+
+
 
 // ── Bot client ─────────────────────────────────────────────
 const client = new Client({
@@ -387,10 +423,23 @@ client.on("messageCreate", async (msg) => {
   const userId = msg.author.id;
   const userName = msg.member?.displayName ?? msg.author.username;
 
-  // Earn kittens for every message
+  // Earn kittens for every message (anti-spam protected)
   ensureUser(userId, userName);
-  db.users[userId].kittens = (db.users[userId].kittens ?? 0) + KITTENS_PER_MESSAGE;
-  saveData(db);
+  const kittenCheck = canEarnKittens(userId, msg.content);
+  if (kittenCheck.earn) {
+    db.users[userId].kittens = (db.users[userId].kittens ?? 0) + KITTENS_PER_MESSAGE;
+    saveData(db);
+  } else if (kittenCheck.spam) {
+    // Deduct 50 kittens and freeze for 5 minutes
+    const before = db.users[userId].kittens ?? 0;
+    db.users[userId].kittens = Math.max(0, before - 300);
+    saveData(db);
+    await msg.reply(
+      `🚨 **SPAM DETECTED, ${userName}!**\n` +
+      `You've been deducted **300 🐱 kittens** and your kitten earning is **frozen for 5 minutes**.\n` +
+      `Stop sending repeated or short messages to farm kittens!`
+    ).catch(() => {});
+  }
 
   // ── Race word detection ──────────────────────────────────
   const channelRace = activeRaces.get(msg.channel.id);
