@@ -868,8 +868,11 @@ client.on("messageCreate", async (msg) => {
 
     await msg.channel.send({ embeds: [embed] });
   }
+});
 
-  // ── Race word detection ──────────────────────────────────
+// ── Race word detection — separate message listener ────────
+client.on("messageCreate", async (msg) => {
+  if (msg.author.bot) return;
   const channelRace = activeRaces.get(msg.channel.id);
   if (channelRace && channelRace.phase === "racing" && channelRace.participants.has(msg.author.id)) {
     const typed = msg.content.trim().toLowerCase();
