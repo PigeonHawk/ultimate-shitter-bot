@@ -686,6 +686,37 @@ client.on("messageCreate", async (msg) => {
     await msg.channel.send({ embeds: [embed] });
   }
 
+  // ── !donate ───────────────────────────────────────────────
+  else if (cmd === "donate") {
+    const target = msg.mentions.users.first();
+    const amount = parseInt(args[args.length - 1]);
+
+    if (!target) return msg.reply("❌ Usage: `!donate @user <amount>`");
+    if (target.id === userId) return msg.reply("❌ You can't donate to yourself!");
+    if (target.bot) return msg.reply("❌ You can't donate to a bot!");
+    if (isNaN(amount) || amount <= 0) return msg.reply("❌ Provide a positive amount — e.g. `!donate @user 10`");
+
+    const senderBal = getKittens(userId);
+    if (senderBal < amount) return msg.reply(`❌ You only have **${senderBal.toLocaleString()} 🐱 kittens** — can't donate **${amount.toLocaleString()}**`);
+
+    ensureUser(target.id, target.username);
+    removeKittens(userId, amount);
+    addKittens(target.id, amount);
+
+    const targetName = msg.guild?.members.cache.get(target.id)?.displayName ?? target.username;
+    const senderName = msg.guild?.members.cache.get(userId)?.displayName ?? userName;
+    const embed = new EmbedBuilder()
+      .setTitle("🎁  Kitten Donation")
+      .setDescription(`**${senderName}** donated **${amount.toLocaleString()} 🐱 kittens** to **${targetName}**!`)
+      .addFields(
+        { name: senderName, value: `${(senderBal - amount).toLocaleString()} 🐱 remaining`, inline: true },
+        { name: targetName, value: `${getKittens(target.id).toLocaleString()} 🐱 total`, inline: true },
+      )
+      .setColor(0x2ecc71)
+      .setTimestamp();
+    await msg.channel.send({ embeds: [embed] });
+  }
+
   // ── !rob ──────────────────────────────────────────────────
   else if (cmd === "rob") {
     ensureUser(userId, userName);
@@ -1153,6 +1184,7 @@ client.on("messageCreate", async (msg) => {
         { name: "`!blackjack @user1 [@user2 ...] <bet>`", value: "Challenge one or more people to blackjack" },
         { name: "`!blackjack open <bet>`", value: "Open a public table — anyone can `!join` within 30s" },
         { name: "`!hit` / `!stand`", value: "Blackjack moves during your turn" },
+        { name: "`!donate @user <amount>`", value: "Donate kittens to another user" },
         { name: "`!rob @user <amount> [rps]`", value: "Rob a specific user — dice roll (default) or rock paper scissors · 2 robs/day" },
         { name: "`!rob <amount> [rps]`", value: "Rob a random user — win 1.5× stake on win · tie in RPS = null · 30s to respond" },
         { name: "`!report @user`", value: "Report a user for spam — 2 reports triggers a 300 🐱 penalty + 2 min freeze" },
