@@ -227,17 +227,18 @@ function formatHand(hand, hideSecond = false) {
 
 function buildGameEmbed(game, reveal = false) {
   const dealerVal = reveal ? handValue(game.dealerHand) : "?";
-  const p1Val = handValue(game.hands[game.p1]);
-  const p2Val = game.p2 ? handValue(game.hands[game.p2]) : null;
   const desc = [
     `🃏 **Dealer:** ${formatHand(game.dealerHand, !reveal)} ${reveal ? `(${dealerVal})` : ""}`,
     ``,
-    `😺 **${game.p1Name}:** ${formatHand(game.hands[game.p1])} **(${p1Val})**`,
   ];
-  if (game.p2) desc.push(`😺 **${game.p2Name}:** ${formatHand(game.hands[game.p2])} **(${p2Val})**`);
-  desc.push(``, `💰 Pot: **${game.bet * (game.p2 ? 2 : 1)} 🐱 kittens**`);
-  const whose = game.turn === game.p1 ? game.p1Name : game.p2Name;
-  if (!reveal) desc.push(`\n⏳ **${whose}'s turn** — \`!hit\` or \`!stand\``);
+  for (const { id, name } of game.players) {
+    desc.push(`😺 **${name}:** ${formatHand(game.hands[id])} **(${handValue(game.hands[id])})**`);
+  }
+  desc.push(``, `💰 Pot: **${game.bet * (game.vsBot ? 1 : game.players.length)} 🐱 kittens**`);
+  if (!reveal) {
+    const current = game.players.find(p => p.id === game.turn);
+    desc.push(`\n⏳ **${current.name}'s turn** — \`!hit\` or \`!stand\``);
+  }
   return new EmbedBuilder()
     .setTitle("🃏  Blackjack")
     .setDescription(desc.join("\n"))
@@ -247,16 +248,20 @@ function buildGameEmbed(game, reveal = false) {
 function advanceTurn(channel, channelId) {
   const game = activeGames.get(channelId);
   if (!game) return;
-  if (game.vsBot || (game.stood.has(game.p1) && game.stood.has(game.p2))) {
+  if (game.vsBot || game.players.every(p => game.stood.has(p.id))) {
     return resolveBlackjack(channel, channelId);
   }
-  if (game.turn === game.p1 && !game.stood.has(game.p2)) {
-    game.turn = game.p2;
-    const embed = buildGameEmbed(game);
-    channel.send({ content: `➡️ **${game.p2Name}**'s turn!`, embeds: [embed] });
-  } else {
-    resolveBlackjack(channel, channelId);
+  const idx = game.players.findIndex(p => p.id === game.turn);
+  for (let i = 1; i <= game.players.length; i++) {
+    const next = game.players[(idx + i) % game.players.length];
+    if (!game.stood.has(next.id)) {
+      game.turn = next.id;
+      const embed = buildGameEmbed(game);
+      channel.send({ content: `➡️ **${next.name}**'s turn!`, embeds: [embed] });
+      return;
+    }
   }
+  resolveBlackjack(channel, channelId);
 }
 
 async function resolveBlackjack(channel, channelId) {
@@ -266,38 +271,47 @@ async function resolveBlackjack(channel, channelId) {
   while (handValue(game.dealerHand) < 17) game.dealerHand.push(game.deck.pop());
   const dealerVal = handValue(game.dealerHand);
   const results = [];
-  const resolvePlayer = (playerId, playerName) => {
-    const playerVal = handValue(game.hands[playerId]);
-    const busted = playerVal > 21;
-    const dealerBusted = dealerVal > 21;
-    let outcome;
-    if (busted) {
-      outcome = `💥 **${playerName}** busted (${playerVal}) — loses **${game.bet} 🐱**`;
-    } else if (dealerBusted || playerVal > dealerVal) {
-      outcome = `🎉 **${playerName}** wins! (${playerVal} vs dealer ${dealerVal}) — wins **${game.bet * 2} 🐱**`;
-      addKittens(playerId, game.bet * 2);
+  for (const { id, name } of game.players) {
+    const playerVal = handValue(game.hands[id]);
+    if (playerVal > 21) {
+      results.push(`💥 **${name}** busted (${playerVal}) — loses **${game.bet} 🐱**`);
+    } else if (dealerVal > 21 || playerVal > dealerVal) {
+      results.push(`🎉 **${name}** wins! (${playerVal} vs dealer ${dealerVal}) — wins **${game.bet * 2} 🐱**`);
+      addKittens(id, game.bet * 2);
     } else if (playerVal === dealerVal) {
-      outcome = `🤝 **${playerName}** pushes (${playerVal}) — bet returned`;
-      addKittens(playerId, game.bet);
+      results.push(`🤝 **${name}** pushes (${playerVal}) — bet returned`);
+      addKittens(id, game.bet);
     } else {
-      outcome = `😔 **${playerName}** loses (${playerVal} vs dealer ${dealerVal}) — loses **${game.bet} 🐱**`;
+      results.push(`😔 **${name}** loses (${playerVal} vs dealer ${dealerVal}) — loses **${game.bet} 🐱**`);
     }
-    results.push(outcome);
-  };
-  resolvePlayer(game.p1, game.p1Name);
-  if (game.p2) resolvePlayer(game.p2, game.p2Name);
+  }
+  const playerLines = game.players.map(({ id, name }) =>
+    `😺 **${name}:** ${formatHand(game.hands[id])} **(${handValue(game.hands[id])})**`
+  );
   const embed = new EmbedBuilder()
     .setTitle("🃏  Blackjack — Results")
     .setDescription([
       `🃏 **Dealer:** ${formatHand(game.dealerHand)} **(${dealerVal})**`,
-      `😺 **${game.p1Name}:** ${formatHand(game.hands[game.p1])} **(${handValue(game.hands[game.p1])})**`,
-      game.p2 ? `😺 **${game.p2Name}:** ${formatHand(game.hands[game.p2])} **(${handValue(game.hands[game.p2])})**` : null,
+      ...playerLines,
       ``,
       ...results,
-    ].filter(Boolean).join("\n"))
+    ].join("\n"))
     .setColor(0xe74c3c)
     .setTimestamp();
   await channel.send({ embeds: [embed] });
+}
+
+async function startPvPGame(channel, channelId, players, bet) {
+  const deck = makeDeck();
+  const hands = {};
+  for (const { id } of players) hands[id] = [deck.pop(), deck.pop()];
+  const dealerHand = [deck.pop(), deck.pop()];
+  for (const { id } of players) removeKittens(id, bet);
+  const game = { players, bet, deck, hands, dealerHand, turn: players[0].id, stood: new Set(), vsBot: false };
+  activeGames.set(channelId, game);
+  const nameList = players.map(p => `**${p.name}**`).join(", ");
+  const embed = buildGameEmbed(game);
+  await channel.send({ content: `🃏 ${nameList} — **${bet} 🐱 kittens** each!`, embeds: [embed] });
 }
 
 // ── Report-based spam tracking ─────────────────────────────
@@ -633,49 +647,91 @@ client.on("messageCreate", async (msg) => {
   else if (cmd === "blackjack" || cmd === "bj") {
     const channelId = msg.channel.id;
     if (activeGames.has(channelId)) return msg.reply("❌ There's already a game running in this channel!");
-    const mentionedUser = msg.mentions.users.first();
+    const mentionedUsers = [...msg.mentions.users.values()].filter(u => u.id !== client.user.id);
 
-    if (mentionedUser) {
-      const betArg = parseInt(args[1] ?? args[0]);
-      if (isNaN(betArg) || betArg <= 0) return msg.reply("Usage: `!blackjack @user <bet>`");
-      const p2 = mentionedUser.id;
-      if (p2 === userId) return msg.reply("❌ You can't challenge yourself!");
-      if (p2 === client.user.id) return msg.reply("❌ Use `!blackjack <bet>` to play against the dealer!");
+    if (mentionedUsers.length > 0) {
+      const betArg = parseInt(args[args.length - 1]);
+      if (isNaN(betArg) || betArg <= 0) return msg.reply("Usage: `!blackjack @user1 [@user2 ...] <bet>`");
       const p1Kittens = getKittens(userId);
-      const p2Kittens = getKittens(p2);
       if (p1Kittens < betArg) return msg.reply(`❌ You only have **${p1Kittens} 🐱 kittens**!`);
-      if (p2Kittens < betArg) return msg.reply(`❌ <@${p2}> only has **${p2Kittens} 🐱 kittens**!`);
       const spamTracker = msg.client.bjSpamTracker ?? (msg.client.bjSpamTracker = new Map());
-      const spamKey = `${userId}-${p2}`;
-      const spamCount = spamTracker.get(spamKey) ?? 0;
-      if (spamCount >= 3) return msg.reply(`❌ You've sent **3 unanswered challenges** to <@${p2}>! Wait for them to respond.`);
-      const challengeMsg = await msg.channel.send(`🃏 <@${p2}> — **${userName}** challenges you to Blackjack for **${betArg} 🐱 kittens**!\nType \`!accept\` within 30 seconds!`);
-      spamTracker.set(spamKey, spamCount + 1);
+      const p2s = [];
+      for (const u of mentionedUsers) {
+        if (u.id === userId) return msg.reply("❌ You can't challenge yourself!");
+        const p2Kittens = getKittens(u.id);
+        if (p2Kittens < betArg) return msg.reply(`❌ <@${u.id}> only has **${p2Kittens} 🐱 kittens**!`);
+        const spamKey = `${userId}-${u.id}`;
+        const spamCount = spamTracker.get(spamKey) ?? 0;
+        if (spamCount >= 3) return msg.reply(`❌ You've sent **3 unanswered challenges** to <@${u.id}>! Wait for them to respond.`);
+        p2s.push({ id: u.id, spamKey });
+      }
+      for (const { spamKey } of p2s) spamTracker.set(spamKey, (spamTracker.get(spamKey) ?? 0) + 1);
+      const mentions = p2s.map(p => `<@${p.id}>`).join(", ");
+      const challengeMsg = await msg.channel.send(
+        `🃏 ${mentions} — **${userName}** challenges you to Blackjack for **${betArg} 🐱 kittens** each!\nType \`!accept\` within 60 seconds!`
+      );
       const pendingGames = msg.client.pendingGames ?? (msg.client.pendingGames = new Map());
-      pendingGames.set(channelId, { p1: userId, p1Name: userName, p2, bet: betArg, expiresAt: Date.now() + 30000, spamKey });
-      setTimeout(() => {
-        if (pendingGames.has(channelId)) {
-          pendingGames.delete(channelId);
-          const p2Bal = getKittens(p2);
-          if (p2Bal > 0) {
-            removeKittens(p2, 1);
-            addKittens(userId, 1);
-            challengeMsg.reply(`⏰ Challenge expired — <@${p2}> didn't respond and lost **1 🐱 kitten** to **${userName}**!`).catch(() => {});
-          } else {
-            challengeMsg.reply("⏰ Challenge expired — no response in 30 seconds.").catch(() => {});
+      pendingGames.set(channelId, { type: "challenge", p1: userId, p1Name: userName, p2s, accepted: new Map(), bet: betArg, expiresAt: Date.now() + 60000 });
+      setTimeout(async () => {
+        const pending = pendingGames.get(channelId);
+        if (!pending || pending.type !== "challenge") return;
+        pendingGames.delete(channelId);
+        const noShows = pending.p2s.filter(p => !pending.accepted.has(p.id));
+        for (const { id, spamKey } of noShows) {
+          spamTracker.delete(spamKey);
+          if (getKittens(id) > 0) { removeKittens(id, 1); addKittens(userId, 1); }
+        }
+        if (pending.accepted.size === 0) {
+          challengeMsg.reply(`⏰ Challenge expired — nobody responded! No-shows each lost **1 🐱 kitten** to **${userName}**.`).catch(() => {});
+        } else {
+          const players = [{ id: pending.p1, name: pending.p1Name }];
+          for (const { id } of pending.p2s) {
+            if (pending.accepted.has(id)) players.push({ id, name: pending.accepted.get(id) });
+          }
+          await startPvPGame(msg.channel, channelId, players, pending.bet);
+          if (noShows.length > 0) {
+            const noShowMentions = noShows.map(p => `<@${p.id}>`).join(", ");
+            msg.channel.send(`⏰ ${noShowMentions} didn't respond and each lost **1 🐱 kitten** to **${userName}**.`).catch(() => {});
           }
         }
+      }, 60000);
+    } else if (args[0]?.toLowerCase() === "open") {
+      const betArg = parseInt(args[1]);
+      if (isNaN(betArg) || betArg <= 0) return msg.reply("Usage: `!blackjack open <bet>`");
+      const p1Kittens = getKittens(userId);
+      if (p1Kittens < betArg) return msg.reply(`❌ You only have **${p1Kittens} 🐱 kittens**!`);
+      const pendingGames = msg.client.pendingGames ?? (msg.client.pendingGames = new Map());
+      if (pendingGames.has(channelId)) return msg.reply("❌ There's already a pending game in this channel!");
+      const participants = new Map([[userId, userName]]);
+      pendingGames.set(channelId, { type: "open", host: userId, participants, bet: betArg, expiresAt: Date.now() + 30000 });
+      const lobbyEmbed = new EmbedBuilder()
+        .setTitle("🃏  Open Blackjack Table")
+        .setDescription(`**${userName}** opened a table for **${betArg} 🐱 kittens**!\nType \`!join\` within **30 seconds** to sit down!`)
+        .setColor(0x2ecc71)
+        .setFooter({ text: "Need at least 2 players to start" });
+      const lobbyMsg = await msg.channel.send({ embeds: [lobbyEmbed] });
+      setTimeout(async () => {
+        const pending = pendingGames.get(channelId);
+        if (!pending || pending.type !== "open") return;
+        pendingGames.delete(channelId);
+        if (pending.participants.size < 2) {
+          lobbyMsg.reply("❌ Not enough players joined — table cancelled! (Need at least 2)").catch(() => {});
+          return;
+        }
+        const players = [...pending.participants.entries()].map(([id, name]) => ({ id, name }));
+        await startPvPGame(msg.channel, channelId, players, pending.bet);
       }, 30000);
     } else {
       const bet = parseInt(args[0]);
-      if (isNaN(bet) || bet <= 0) return msg.reply("Usage: `!blackjack <bet>` or `!blackjack @user <bet>`");
+      if (isNaN(bet) || bet <= 0) return msg.reply("Usage: `!blackjack <bet>` or `!blackjack @user1 [@user2 ...] <bet>`");
       const p1Kittens = getKittens(userId);
       if (p1Kittens < bet) return msg.reply(`❌ You only have **${p1Kittens} 🐱 kittens**!`);
       const deck = makeDeck();
       const hands = { [userId]: [deck.pop(), deck.pop()] };
       const dealerHand = [deck.pop(), deck.pop()];
       removeKittens(userId, bet);
-      const game = { p1: userId, p1Name: userName, p2: null, p2Name: null, bet, deck, hands, dealerHand, turn: userId, stood: new Set(), vsBot: true };
+      const players = [{ id: userId, name: userName }];
+      const game = { players, bet, deck, hands, dealerHand, turn: userId, stood: new Set(), vsBot: true };
       activeGames.set(channelId, game);
       const embed = buildGameEmbed(game);
       await msg.channel.send({ content: `🃏 **${userName}** plays Blackjack vs the dealer for **${bet} 🐱 kittens**!`, embeds: [embed] });
@@ -688,26 +744,29 @@ client.on("messageCreate", async (msg) => {
     const channelId = msg.channel.id;
     const pendingGames = msg.client.pendingGames;
     const pending = pendingGames?.get(channelId);
-    if (!pending) return msg.reply("❌ No pending challenge in this channel.");
-    if (msg.author.id !== pending.p2) return msg.reply("❌ This challenge isn't for you!");
+    if (!pending || pending.type !== "challenge") return msg.reply("❌ No pending challenge in this channel.");
+    const isChallengee = pending.p2s.some(p => p.id === msg.author.id);
+    if (!isChallengee) return msg.reply("❌ This challenge isn't for you!");
     if (Date.now() > pending.expiresAt) {
       pendingGames.delete(channelId);
       return msg.reply("⏰ That challenge already expired.");
     }
-    pendingGames.delete(channelId);
+    if (pending.accepted.has(msg.author.id)) return msg.reply("❌ You've already accepted!");
+    const acceptName = msg.member?.displayName ?? msg.author.username;
+    pending.accepted.set(msg.author.id, acceptName);
     const spamTracker = msg.client.bjSpamTracker;
-    if (spamTracker && pending.spamKey) spamTracker.delete(pending.spamKey);
-    const { p1, p1Name, p2, bet } = pending;
-    const p2Name = msg.member?.displayName ?? msg.author.username;
-    removeKittens(p1, bet);
-    removeKittens(p2, bet);
-    const deck = makeDeck();
-    const hands = { [p1]: [deck.pop(), deck.pop()], [p2]: [deck.pop(), deck.pop()] };
-    const dealerHand = [deck.pop(), deck.pop()];
-    const game = { p1, p1Name, p2, p2Name, bet, deck, hands, dealerHand, turn: p1, stood: new Set(), vsBot: false };
-    activeGames.set(channelId, game);
-    const embed = buildGameEmbed(game);
-    await msg.channel.send({ content: `🃏 **${p1Name}** vs **${p2Name}** — **${bet} 🐱 kittens** each!`, embeds: [embed] });
+    const entry = pending.p2s.find(p => p.id === msg.author.id);
+    if (spamTracker && entry?.spamKey) spamTracker.delete(entry.spamKey);
+    const remaining = pending.p2s.filter(p => !pending.accepted.has(p.id));
+    if (remaining.length > 0) {
+      const remainMentions = remaining.map(p => `<@${p.id}>`).join(", ");
+      await msg.reply(`✅ **${acceptName}** accepted! Still waiting for: ${remainMentions}`);
+    } else {
+      pendingGames.delete(channelId);
+      const players = [{ id: pending.p1, name: pending.p1Name }];
+      for (const { id } of pending.p2s) players.push({ id, name: pending.accepted.get(id) });
+      await startPvPGame(msg.channel, channelId, players, pending.bet);
+    }
   }
 
   // ── !hit ──────────────────────────────────────────────────
@@ -719,10 +778,11 @@ client.on("messageCreate", async (msg) => {
     const card = game.deck.pop();
     game.hands[game.turn].push(card);
     const val = handValue(game.hands[game.turn]);
-    const name = game.turn === game.p1 ? game.p1Name : game.p2Name;
+    const name = game.players.find(p => p.id === game.turn).name;
     if (val > 21) {
       await msg.channel.send(`💥 **${name}** busted with **${val}**!`);
-      return resolveBlackjack(msg.channel, channelId);
+      game.stood.add(game.turn);
+      advanceTurn(msg.channel, channelId);
     } else if (val === 21) {
       await msg.channel.send(`✨ **${name}** hit 21! Standing automatically.`);
       game.stood.add(game.turn);
@@ -738,7 +798,7 @@ client.on("messageCreate", async (msg) => {
     const game = activeGames.get(channelId);
     if (!game) return;
     if (msg.author.id !== game.turn) return msg.reply("❌ It's not your turn!");
-    const name = game.turn === game.p1 ? game.p1Name : game.p2Name;
+    const name = game.players.find(p => p.id === game.turn).name;
     game.stood.add(game.turn);
     await msg.channel.send(`🛑 **${name}** stands at **${handValue(game.hands[game.turn])}**.`);
     advanceTurn(msg.channel, channelId);
@@ -783,10 +843,27 @@ client.on("messageCreate", async (msg) => {
   else if (cmd === "join") {
     const channelId = msg.channel.id;
     const race = activeRaces.get(channelId);
-    if (!race || race.phase !== "joining") return msg.reply("❌ No race is in the joining phase right now. Start one with `!race`!");
-    if (race.participants.has(userId)) return msg.reply("❌ You're already in the race!");
-    race.participants.set(userId, userName);
-    await msg.reply(`✅ **${userName}** joined the race! (${race.participants.size} players so far)`);
+    if (race && race.phase === "joining") {
+      if (race.participants.has(userId)) return msg.reply("❌ You're already in the race!");
+      race.participants.set(userId, userName);
+      await msg.reply(`✅ **${userName}** joined the race! (${race.participants.size} players so far)`);
+      return;
+    }
+    const pendingGames = msg.client.pendingGames;
+    const pending = pendingGames?.get(channelId);
+    if (pending?.type === "open") {
+      if (Date.now() > pending.expiresAt) {
+        pendingGames.delete(channelId);
+        return msg.reply("⏰ That table already closed.");
+      }
+      if (pending.participants.has(userId)) return msg.reply("❌ You're already at the table!");
+      const balance = getKittens(userId);
+      if (balance < pending.bet) return msg.reply(`❌ You need **${pending.bet} 🐱 kittens** to join — you only have **${balance}**!`);
+      pending.participants.set(userId, userName);
+      await msg.reply(`✅ **${userName}** joined the table! (${pending.participants.size} players so far)`);
+      return;
+    }
+    return msg.reply("❌ Nothing to join right now. Start a race with `!race` or an open table with `!blackjack open <bet>`!");
   }
 
   // ── !report ───────────────────────────────────────────────
@@ -878,7 +955,8 @@ client.on("messageCreate", async (msg) => {
         { name: "`!kittens` / `!bal`", value: "Check your kitten balance (or `!kittens @user`)" },
         { name: "`!kittenboard` / `!kb`", value: "Kitten rich list" },
         { name: "`!blackjack <bet>`", value: "Play blackjack vs the dealer" },
-        { name: "`!blackjack @user <bet>`", value: "Challenge someone to 1v1 blackjack" },
+        { name: "`!blackjack @user1 [@user2 ...] <bet>`", value: "Challenge one or more people to blackjack" },
+        { name: "`!blackjack open <bet>`", value: "Open a public table — anyone can `!join` within 30s" },
         { name: "`!hit` / `!stand`", value: "Blackjack moves during your turn" },
         { name: "`!report @user`", value: "Report a user for spam — 2 reports triggers a 300 🐱 penalty + 2 min freeze" },
         { name: "⚡ Quick pooper bonus", value: "Poop within 2 hours of your last for +1.5 points!" },
