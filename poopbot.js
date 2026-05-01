@@ -13,7 +13,7 @@
 //    - Drag the bot's role ABOVE it in Server Settings > Roles
 // ============================================================
 
-const { Client, GatewayIntentBits, EmbedBuilder } = require("discord.js");
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const cron = require("node-cron");
 const fs = require("fs");
 
@@ -193,6 +193,11 @@ function buildLeaderboardEmbed(data, guildMembers) {
     .setFooter({ text: `Week ${weekNum} • Resets every Monday at midnight` })
     .setTimestamp();
 }
+
+// ── Rob helpers ────────────────────────────────────────────
+const pendingRobs = new Map();
+const ROB_DAILY_LIMIT = 2;
+const ROB_RPS_TIMEOUT_MS = 30_000;
 
 // ── Blackjack helpers ──────────────────────────────────────
 const activeGames = new Map();
@@ -681,6 +686,155 @@ client.on("messageCreate", async (msg) => {
     await msg.channel.send({ embeds: [embed] });
   }
 
+  // ── !rob ──────────────────────────────────────────────────
+  else if (cmd === "rob") {
+    ensureUser(userId, userName);
+
+    // Daily limit
+    const today = todayStr();
+    const robUser = db.users[userId];
+    if (robUser.lastRobDate !== today) { robUser.robsToday = 0; robUser.lastRobDate = today; }
+    const robsUsed = robUser.robsToday ?? 0;
+    if (robsUsed >= ROB_DAILY_LIMIT) {
+      return msg.reply(`❌ You've used all **${ROB_DAILY_LIMIT} robbery attempts** for today. Come back tomorrow!`);
+    }
+
+    // Parse mode (optional last arg "rps", default is dice)
+    const lastArg = args[args.length - 1]?.toLowerCase();
+    const mode = lastArg === "rps" ? "rps" : "dice";
+    const stakeArg = parseInt(args[mode === "rps" ? args.length - 2 : args.length - 1]);
+
+    if (isNaN(stakeArg) || stakeArg <= 0) {
+      return msg.reply("❌ Usage: `!rob @user <amount> [rps]` or `!rob <amount> [rps]`");
+    }
+
+    const robberKittens = getKittens(userId);
+    if (robberKittens < stakeArg) {
+      return msg.reply(`❌ You only have **${robberKittens.toLocaleString()} 🐱 kittens** — can't stake **${stakeArg.toLocaleString()}**!`);
+    }
+
+    const mentionedTarget = msg.mentions.users.first();
+    const isRandom = !mentionedTarget;
+    let targetId, targetName;
+
+    if (mentionedTarget) {
+      if (mentionedTarget.id === userId) return msg.reply("❌ You can't rob yourself!");
+      if (mentionedTarget.bot) return msg.reply("❌ You can't rob a bot!");
+      targetId = mentionedTarget.id;
+      ensureUser(targetId, mentionedTarget.username);
+      targetName = msg.guild?.members.cache.get(targetId)?.displayName ?? mentionedTarget.username;
+      const targetKittens = getKittens(targetId);
+      if (targetKittens < stakeArg) {
+        return msg.reply(`❌ **${targetName}** only has **${targetKittens.toLocaleString()} 🐱 kittens** — not enough to rob!`);
+      }
+    } else {
+      const eligible = Object.entries(db.users).filter(([id, u]) => id !== userId && (u.kittens ?? 0) >= stakeArg);
+      if (eligible.length === 0) {
+        return msg.reply(`❌ No one has **${stakeArg.toLocaleString()} 🐱 kittens** for you to rob!`);
+      }
+      const [randomId, randomUser] = eligible[Math.floor(Math.random() * eligible.length)];
+      targetId = randomId;
+      targetName = msg.guild?.members.cache.get(targetId)?.displayName ?? randomUser.name ?? `User ${targetId}`;
+    }
+
+    // Consume a daily attempt
+    robUser.robsToday = robsUsed + 1;
+    saveData(db);
+
+    const robberDisplayName = msg.member?.displayName ?? userName;
+    const robsLeft = ROB_DAILY_LIMIT - robUser.robsToday;
+
+    if (mode === "dice") {
+      let roll1, roll2;
+      do {
+        roll1 = Math.floor(Math.random() * 6) + 1;
+        roll2 = Math.floor(Math.random() * 6) + 1;
+      } while (roll1 === roll2);
+
+      const robberWins = roll1 > roll2;
+      const winAmount = isRandom && robberWins ? Math.floor(stakeArg * 1.5) : stakeArg;
+
+      let description;
+      if (robberWins) {
+        removeKittens(targetId, stakeArg);
+        addKittens(userId, winAmount);
+        if (isRandom) {
+          description = `🎲 **${robberDisplayName}** rolled **${roll1}** · **${targetName}** rolled **${roll2}**\n\n🔫 **${robberDisplayName}** wins! Stole **${stakeArg.toLocaleString()} 🐱** and got a **+${(winAmount - stakeArg).toLocaleString()} 🐱 RNG bonus** for **${winAmount.toLocaleString()} 🐱 total**!`;
+        } else {
+          description = `🎲 **${robberDisplayName}** rolled **${roll1}** · **${targetName}** rolled **${roll2}**\n\n🔫 **${robberDisplayName}** wins and steals **${stakeArg.toLocaleString()} 🐱** from **${targetName}**!`;
+        }
+      } else {
+        removeKittens(userId, stakeArg);
+        addKittens(targetId, stakeArg);
+        description = `🎲 **${robberDisplayName}** rolled **${roll1}** · **${targetName}** rolled **${roll2}**\n\n🛡️ **${targetName}** defended! **${robberDisplayName}** loses **${stakeArg.toLocaleString()} 🐱** to **${targetName}**!`;
+      }
+
+      const embed = new EmbedBuilder()
+        .setTitle("🔫  Rob Attempt — Dice!")
+        .setDescription(description)
+        .setColor(robberWins ? 0xe74c3c : 0x2ecc71)
+        .addFields(
+          { name: robberDisplayName, value: `${getKittens(userId).toLocaleString()} 🐱`, inline: true },
+          { name: targetName, value: `${getKittens(targetId).toLocaleString()} 🐱`, inline: true },
+        )
+        .setFooter({ text: `${isRandom ? "Random target — 50% bonus on win · " : ""}${robsLeft} rob${robsLeft === 1 ? "" : "s"} left today` })
+        .setTimestamp();
+
+      await msg.channel.send({ embeds: [embed] });
+
+    } else {
+      // RPS mode
+      const robKey = `${userId}_${targetId}`;
+      if (pendingRobs.has(robKey)) {
+        return msg.reply("❌ You already have a pending RPS robbery against this person!");
+      }
+
+      const rpsRow = () => new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`rob_rps_${userId}_${targetId}_rock`).setLabel("🪨 Rock").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`rob_rps_${userId}_${targetId}_paper`).setLabel("📄 Paper").setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`rob_rps_${userId}_${targetId}_scissors`).setLabel("✂️ Scissors").setStyle(ButtonStyle.Secondary),
+      );
+
+      const phaseEmbed = (desc) => new EmbedBuilder()
+        .setTitle("🔫  Rob Attempt — Rock Paper Scissors!")
+        .setDescription(desc)
+        .setColor(0xe67e22)
+        .setFooter({ text: `${isRandom ? "Random target — 50% bonus on win · " : ""}${robsLeft} rob${robsLeft === 1 ? "" : "s"} left today · 30s per phase` })
+        .setTimestamp();
+
+      const sentMsg = await msg.channel.send({
+        embeds: [phaseEmbed(`**${robberDisplayName}** is trying to rob <@${targetId}> for **${stakeArg.toLocaleString()} 🐱**!\n\n<@${userId}> — pick your move first. Only you will see your choice.`)],
+        components: [rpsRow()],
+      });
+
+      const makeTimeout = (phase) => setTimeout(async () => {
+        pendingRobs.delete(robKey);
+        const cancelEmbed = new EmbedBuilder()
+          .setTitle("🔫  Rob Attempt — Cancelled")
+          .setDescription(`⏰ The RPS challenge between **${robberDisplayName}** and **${targetName}** timed out (${phase} didn't respond) — no kittens exchanged.`)
+          .setColor(0x95a5a6)
+          .setTimestamp();
+        sentMsg.edit({ embeds: [cancelEmbed], components: [] }).catch(() => {});
+      }, ROB_RPS_TIMEOUT_MS);
+
+      pendingRobs.set(robKey, {
+        robberId: userId,
+        robberName: robberDisplayName,
+        targetId,
+        targetName,
+        stake: stakeArg,
+        isRandom,
+        robberPick: null,
+        phase: "robber",
+        message: sentMsg,
+        phaseEmbed,
+        rpsRow,
+        timeoutHandle: makeTimeout("robber"),
+        robsLeft,
+      });
+    }
+  }
+
   // ── !blackjack ────────────────────────────────────────────
   else if (cmd === "blackjack" || cmd === "bj") {
     const channelId = msg.channel.id;
@@ -999,6 +1153,8 @@ client.on("messageCreate", async (msg) => {
         { name: "`!blackjack @user1 [@user2 ...] <bet>`", value: "Challenge one or more people to blackjack" },
         { name: "`!blackjack open <bet>`", value: "Open a public table — anyone can `!join` within 30s" },
         { name: "`!hit` / `!stand`", value: "Blackjack moves during your turn" },
+        { name: "`!rob @user <amount> [rps]`", value: "Rob a specific user — dice roll (default) or rock paper scissors · 2 robs/day" },
+        { name: "`!rob <amount> [rps]`", value: "Rob a random user — win 1.5× stake on win · tie in RPS = null · 30s to respond" },
         { name: "`!report @user`", value: "Report a user for spam — 2 reports triggers a 300 🐱 penalty + 2 min freeze" },
         { name: "⚡ Quick pooper bonus", value: "Poop within 2 hours of your last for +1.5 points!" },
         { name: "🐱 Earning kittens", value: "5 kittens per message · 5 kittens per minute in VC" },
@@ -1008,6 +1164,111 @@ client.on("messageCreate", async (msg) => {
       .setColor(0x8b4513)
       .setFooter({ text: "Leaderboard resets every Monday at midnight" });
     await msg.channel.send({ embeds: [embed] });
+  }
+});
+
+// ── RPS rob interactions ───────────────────────────────────
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isButton()) return;
+  const { customId, user } = interaction;
+  if (!customId.startsWith("rob_rps_")) return;
+
+  // customId format: rob_rps_{robberId}_{targetId}_{pick}
+  const parts = customId.split("_");
+  const robberId = parts[2];
+  const targetId = parts[3];
+  const pick = parts[4];
+  const robKey = `${robberId}_${targetId}`;
+
+  const pending = pendingRobs.get(robKey);
+  if (!pending) {
+    return interaction.reply({ content: "❌ This challenge has already ended or expired.", ephemeral: true });
+  }
+
+  const pickEmoji = { rock: "🪨", paper: "📄", scissors: "✂️" };
+  const pickLabel = { rock: "Rock", paper: "Paper", scissors: "Scissors" };
+
+  if (pending.phase === "robber") {
+    if (user.id !== robberId) {
+      return interaction.reply({ content: "❌ You're not the one initiating this robbery!", ephemeral: true });
+    }
+
+    // Store pick, advance to target phase
+    pending.robberPick = pick;
+    pending.phase = "target";
+
+    await interaction.reply({
+      content: `🤫 You picked **${pickEmoji[pick]} ${pickLabel[pick]}**! Waiting for **${pending.targetName}** to respond...`,
+      ephemeral: true,
+    });
+
+    // Reset timeout for target phase
+    clearTimeout(pending.timeoutHandle);
+    pending.timeoutHandle = setTimeout(async () => {
+      pendingRobs.delete(robKey);
+      const cancelEmbed = new EmbedBuilder()
+        .setTitle("🔫  Rob Attempt — Cancelled")
+        .setDescription(`⏰ **${pending.targetName}** didn't respond in time — no kittens exchanged.`)
+        .setColor(0x95a5a6)
+        .setTimestamp();
+      pending.message.edit({ embeds: [cancelEmbed], components: [] }).catch(() => {});
+    }, ROB_RPS_TIMEOUT_MS);
+
+    await pending.message.edit({
+      embeds: [pending.phaseEmbed(`**${pending.robberName}** has locked in their move! 🔒\n\n<@${targetId}> — defend yourself! Pick your move:`)],
+      components: [pending.rpsRow()],
+    }).catch(() => {});
+
+  } else {
+    // Target's turn
+    if (user.id !== targetId) {
+      return interaction.reply({ content: "❌ You're not the one being robbed here!", ephemeral: true });
+    }
+
+    clearTimeout(pending.timeoutHandle);
+    pendingRobs.delete(robKey);
+
+    const { robberId: rId, robberName, targetName, stake, isRandom, robberPick, robsLeft } = pending;
+    const beats = { rock: "scissors", paper: "rock", scissors: "paper" };
+
+    let result;
+    if (robberPick === pick) result = "tie";
+    else if (beats[robberPick] === pick) result = "robber";
+    else result = "target";
+
+    const moveLine = `${pickEmoji[robberPick]} **${robberName}** picked **${pickLabel[robberPick]}** · ${pickEmoji[pick]} **${targetName}** picked **${pickLabel[pick]}**`;
+    let description, color;
+
+    if (result === "tie") {
+      description = `${moveLine}\n\n🤝 It's a tie! No kittens were exchanged.`;
+      color = 0x95a5a6;
+    } else if (result === "robber") {
+      const winAmount = isRandom ? Math.floor(stake * 1.5) : stake;
+      removeKittens(targetId, stake);
+      addKittens(rId, winAmount);
+      description = isRandom
+        ? `${moveLine}\n\n🔫 **${robberName}** wins! Stole **${stake.toLocaleString()} 🐱** + **${(winAmount - stake).toLocaleString()} 🐱 RNG bonus** = **${winAmount.toLocaleString()} 🐱 total**!`
+        : `${moveLine}\n\n🔫 **${robberName}** wins and steals **${stake.toLocaleString()} 🐱** from **${targetName}**!`;
+      color = 0xe74c3c;
+    } else {
+      removeKittens(rId, stake);
+      addKittens(targetId, stake);
+      description = `${moveLine}\n\n🛡️ **${targetName}** defended! **${robberName}** loses **${stake.toLocaleString()} 🐱** to **${targetName}**!`;
+      color = 0x2ecc71;
+    }
+
+    const finalEmbed = new EmbedBuilder()
+      .setTitle("🔫  Rob Result — Rock Paper Scissors!")
+      .setDescription(description)
+      .setColor(color)
+      .addFields(
+        { name: robberName, value: `${getKittens(rId).toLocaleString()} 🐱`, inline: true },
+        { name: targetName, value: `${getKittens(targetId).toLocaleString()} 🐱`, inline: true },
+      )
+      .setFooter({ text: `${isRandom ? "Random target — 50% bonus on win · " : ""}${robsLeft} rob${robsLeft === 1 ? "" : "s"} left today` })
+      .setTimestamp();
+
+    await interaction.update({ embeds: [finalEmbed], components: [] });
   }
 });
 
