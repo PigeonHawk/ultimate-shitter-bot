@@ -176,7 +176,7 @@ function getTopUser() {
 
 function buildLeaderboardEmbed(data, guildMembers) {
   const sorted = Object.entries(data.users)
-    .sort(([, a], [, b]) => b.points - a.points)
+    .sort(([, a], [, b]) => b.points - a.points || b.count - a.count)
     .slice(0, 10);
   const medals = ["🥇", "🥈", "🥉"];
   const rows = sorted.map(([id, info], i) => {
