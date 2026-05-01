@@ -313,18 +313,45 @@ async function resolveBlackjack(channel, channelId) {
   while (handValue(game.dealerHand) < 17) game.dealerHand.push(game.deck.pop());
   const dealerVal = handValue(game.dealerHand);
   const results = [];
-  for (const { id, name } of game.players) {
-    const playerVal = handValue(game.hands[id]);
-    if (playerVal > 21) {
-      results.push(`💥 **${name}** busted (${playerVal}) — loses **${game.bet} 🐱**`);
-    } else if (dealerVal > 21 || playerVal > dealerVal) {
-      results.push(`🎉 **${name}** wins! (${playerVal} vs dealer ${dealerVal}) — wins **${game.bet * 2} 🐱**`);
-      addKittens(id, game.bet * 2);
-    } else if (playerVal === dealerVal) {
-      results.push(`🤝 **${name}** pushes (${playerVal}) — bet returned`);
-      addKittens(id, game.bet);
-    } else {
-      results.push(`😔 **${name}** loses (${playerVal} vs dealer ${dealerVal}) — loses **${game.bet} 🐱**`);
+  if (game.vsBot) {
+    for (const { id, name } of game.players) {
+      const playerVal = handValue(game.hands[id]);
+      if (playerVal > 21) {
+        results.push(`💥 **${name}** busted (${playerVal}) — loses **${game.bet} 🐱**`);
+      } else if (dealerVal > 21 || playerVal > dealerVal) {
+        results.push(`🎉 **${name}** wins! (${playerVal} vs dealer ${dealerVal}) — wins **${game.bet * 2} 🐱**`);
+        addKittens(id, game.bet * 2);
+      } else if (playerVal === dealerVal) {
+        results.push(`🤝 **${name}** pushes (${playerVal}) — bet returned`);
+        addKittens(id, game.bet);
+      } else {
+        results.push(`😔 **${name}** loses (${playerVal} vs dealer ${dealerVal}) — loses **${game.bet} 🐱**`);
+      }
+    }
+  } else {
+    // PvP: pool is all antes; pushers get refunded, winners split what remains
+    let pool = game.players.length * game.bet;
+    const winners = [];
+    for (const { id, name } of game.players) {
+      const playerVal = handValue(game.hands[id]);
+      if (playerVal > 21) {
+        results.push(`💥 **${name}** busted (${playerVal}) — loses **${game.bet} 🐱**`);
+      } else if (dealerVal > 21 || playerVal > dealerVal) {
+        winners.push({ id, name, playerVal });
+      } else if (playerVal === dealerVal) {
+        results.push(`🤝 **${name}** pushes (${playerVal}) — bet returned`);
+        addKittens(id, game.bet);
+        pool -= game.bet;
+      } else {
+        results.push(`😔 **${name}** loses (${playerVal} vs dealer ${dealerVal}) — loses **${game.bet} 🐱**`);
+      }
+    }
+    if (winners.length > 0) {
+      const share = Math.ceil(pool / winners.length);
+      for (const { id, name, playerVal } of winners) {
+        addKittens(id, share);
+        results.push(`🎉 **${name}** wins! (${playerVal} vs dealer ${dealerVal}) — wins **${share} 🐱**`);
+      }
     }
   }
   const playerLines = game.players.map(({ id, name }) =>
