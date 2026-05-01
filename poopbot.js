@@ -1303,7 +1303,6 @@ client.on("messageCreate", async (msg) => {
 
   // ── !poophelp ─────────────────────────────────────────────
   else if (cmd === "poophelp") {
-    const windowList = activeDoubleWindows.map(([s, e]) => `• ${s}:00 – ${e}:00`).join("\n");
     const embed = new EmbedBuilder()
       .setTitle("💩  Ultimate Shitter Bot — Commands")
       .addFields(
@@ -1330,8 +1329,7 @@ client.on("messageCreate", async (msg) => {
         { name: "`!report @user`", value: "Report a user for spam — 2 reports triggers a 300 🐱 penalty + 2 min freeze" },
         { name: "⚡ Quick pooper bonus", value: "Poop within 2 hours of your last for +1.5 points!" },
         { name: "🐱 Earning kittens", value: "5 kittens per message · 5 kittens per minute in VC" },
-        { name: "Today's double-point windows", value: windowList || "None today" },
-        { name: "👑 The Ultimate Shitter", value: "Awarded to the weekly #1 every Monday." },
+{ name: "👑 The Ultimate Shitter", value: "Awarded to the weekly #1 every Monday." },
       )
       .setColor(0x8b4513)
       .setFooter({ text: "Leaderboard resets every Monday at midnight" });
