@@ -1335,6 +1335,23 @@ client.on("messageCreate", async (msg) => {
     ensureUser(userId, userName);
     const kittensRole = msg.guild?.roles.cache.find(r => r.name.toLowerCase() === "kittens");
     const roleMention = kittensRole ? `<@&${kittensRole.id}> ` : "";
+    const user = db.users[userId];
+    const today = todayStr();
+    if (user.begDate !== today) {
+      user.begDate = today;
+      user.begCount = 0;
+    }
+    if (user.begCount >= 5) {
+      removeKittens(userId, 300);
+      await msg.channel.send(
+        `${roleMention}🚨 **AGAIN?!** — <@${userId}>\n\n` +
+        `you've begged **5 times today** and you're STILL here?? the audacity.\n` +
+        `i'm taking **300 🐱 kittens** from you. maybe that'll teach you some dignity.`
+      );
+      return;
+    }
+    user.begCount = (user.begCount ?? 0) + 1;
+    saveData(db);
     const tauntLines = [
       `look who's begging for my help`,
       `absolutely pathetic — someone's desperate for kittens`,
