@@ -231,7 +231,7 @@ function setTurnTimeout(channel, channelId) {
       g.stood.add(g.turn);
       advanceTurn(channel, channelId);
     } else {
-      await channel.send(`⏰ **${name}** took too long — auto-hit! Drew **${card.rank}${card.suit}** **(${val})**. Still their turn — \`!hit\` or \`!stand\``);
+      await channel.send({ content: `⏰ **${name}** took too long — auto-hit! Drew **${card.rank}${card.suit}** **(${val})**. Still their turn!`, embeds: [buildGameEmbed(g)], components: [buildBJRow(channelId)] });
       setTurnTimeout(channel, channelId);
     }
   }, TURN_TIMEOUT_MS);
@@ -277,12 +277,19 @@ function buildGameEmbed(game, reveal = false) {
   desc.push(``, `💰 Pot: **${game.bet * (game.vsBot ? 1 : game.players.length)} 🐱 kittens**`);
   if (!reveal) {
     const current = game.players.find(p => p.id === game.turn);
-    desc.push(`\n⏳ **${current.name}'s turn** — \`!hit\` or \`!stand\``);
+    desc.push(`\n⏳ **${current.name}'s turn**`);
   }
   return new EmbedBuilder()
     .setTitle("🃏  Blackjack")
     .setDescription(desc.join("\n"))
     .setColor(0x2ecc71);
+}
+
+function buildBJRow(channelId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`bj_hit_${channelId}`).setLabel("Hit").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`bj_stand_${channelId}`).setLabel("Stand").setStyle(ButtonStyle.Danger),
+  );
 }
 
 function advanceTurn(channel, channelId) {
@@ -297,7 +304,7 @@ function advanceTurn(channel, channelId) {
     if (!game.stood.has(next.id)) {
       game.turn = next.id;
       const embed = buildGameEmbed(game);
-      channel.send({ content: `➡️ **${next.name}**'s turn!`, embeds: [embed] });
+      channel.send({ content: `➡️ **${next.name}**'s turn!`, embeds: [embed], components: [buildBJRow(channelId)] });
       setTurnTimeout(channel, channelId);
       return;
     }
@@ -380,7 +387,7 @@ async function startPvPGame(channel, channelId, players, bet) {
   activeGames.set(channelId, game);
   const nameList = players.map(p => `**${p.name}**`).join(", ");
   const embed = buildGameEmbed(game);
-  await channel.send({ content: `🃏 ${nameList} — **${bet} 🐱 kittens** each!`, embeds: [embed] });
+  await channel.send({ content: `🃏 ${nameList} — **${bet} 🐱 kittens** each!`, embeds: [embed], components: [buildBJRow(channelId)] });
   setTurnTimeout(channel, channelId);
 }
 
@@ -991,7 +998,7 @@ client.on("messageCreate", async (msg) => {
       const game = { players, bet, deck, hands, dealerHand, turn: userId, stood: new Set(), vsBot: true };
       activeGames.set(channelId, game);
       const embed = buildGameEmbed(game);
-      await msg.channel.send({ content: `🃏 **${userName}** plays Blackjack vs the dealer for **${bet} 🐱 kittens**!`, embeds: [embed] });
+      await msg.channel.send({ content: `🃏 **${userName}** plays Blackjack vs the dealer for **${bet} 🐱 kittens**!`, embeds: [embed], components: [buildBJRow(channelId)] });
       if (handValue(hands[userId]) === 21) resolveBlackjack(msg.channel, channelId);
       else setTurnTimeout(msg.channel, channelId);
     }
@@ -1047,7 +1054,7 @@ client.on("messageCreate", async (msg) => {
       game.stood.add(game.turn);
       advanceTurn(msg.channel, channelId);
     } else {
-      await msg.channel.send({ embeds: [buildGameEmbed(game)] });
+      await msg.channel.send({ embeds: [buildGameEmbed(game)], components: [buildBJRow(channelId)] });
     }
   }
 
@@ -1312,7 +1319,7 @@ client.on("messageCreate", async (msg) => {
         { name: "`!blackjack <bet>`", value: "Play blackjack vs the dealer" },
         { name: "`!blackjack @user1 [@user2 ...] <bet>`", value: "Challenge one or more people to blackjack" },
         { name: "`!blackjack open <bet>`", value: "Open a public table — anyone can `!join` within 30s" },
-        { name: "`!hit` / `!stand`", value: "Blackjack moves during your turn" },
+        { name: "`!blackjack` buttons", value: "Hit / Stand buttons appear during your turn" },
         { name: "`!donate @user <amount>`", value: "Donate kittens to another user" },
         { name: "`!rps <bet>`", value: "Play Rock Paper Scissors vs the house — win doubles your bet, tie refunds it" },
         { name: "`!rps @user <bet>`", value: "Challenge someone to 1v1 RPS — winner takes the other's bet" },
@@ -1391,6 +1398,46 @@ client.on("messageCreate", async (msg) => {
     if (admins.size === 0) return msg.reply("No admins found.");
     const mentions = admins.map((m) => `<@${m.id}>`).join(" ");
     await msg.channel.send(`🚔 ${mentions}`);
+  }
+});
+
+// ── Blackjack interactions ─────────────────────────────────
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isButton()) return;
+  const { customId, user } = interaction;
+  if (!customId.startsWith("bj_")) return;
+
+  const [, action, channelId] = customId.split("_");
+  const game = activeGames.get(channelId);
+  if (!game) return interaction.reply({ content: "❌ This game has already ended.", ephemeral: true });
+  if (user.id !== game.turn) return interaction.reply({ content: "❌ It's not your turn!", ephemeral: true });
+
+  clearTurnTimeout(game);
+  const channel = interaction.channel;
+  const name = game.players.find(p => p.id === game.turn).name;
+
+  if (action === "hit") {
+    const card = game.deck.pop();
+    game.hands[game.turn].push(card);
+    const val = handValue(game.hands[game.turn]);
+    if (val > 21) {
+      await interaction.update({ components: [] });
+      await channel.send(`💥 **${name}** busted with **${val}**!`);
+      game.stood.add(game.turn);
+      advanceTurn(channel, channelId);
+    } else if (val === 21) {
+      await interaction.update({ components: [] });
+      await channel.send(`✨ **${name}** hit 21! Standing automatically.`);
+      game.stood.add(game.turn);
+      advanceTurn(channel, channelId);
+    } else {
+      await interaction.update({ embeds: [buildGameEmbed(game)], components: [buildBJRow(channelId)] });
+    }
+  } else {
+    game.stood.add(game.turn);
+    await interaction.update({ components: [] });
+    await channel.send(`🛑 **${name}** stands at **${handValue(game.hands[game.turn])}**.`);
+    advanceTurn(channel, channelId);
   }
 });
 
