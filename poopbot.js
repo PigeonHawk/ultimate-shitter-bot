@@ -1318,6 +1318,7 @@ client.on("messageCreate", async (msg) => {
         { name: "`!rps @user <bet>`", value: "Challenge someone to 1v1 RPS — winner takes the other's bet" },
         { name: "`!rob @user <amount> [rps]`", value: "Rob a specific user — dice roll (default) or rock paper scissors · 2 robs/day" },
         { name: "`!rob <amount> [rps]`", value: "Rob a random user — win 1.5× stake on win · tie in RPS = null · 30s to respond" },
+        { name: "`!beg`", value: "Beg the house for kittens — 40% chance of 1–200 🐱, 100% chance of humiliation" },
         { name: "`!cops`", value: "Ping all server admins" },
         { name: "`!report @user`", value: "Report a user for spam — 2 reports triggers a 300 🐱 penalty + 2 min freeze" },
         { name: "⚡ Quick pooper bonus", value: "Poop within 2 hours of your last for +1.5 points!" },
@@ -1329,6 +1330,41 @@ client.on("messageCreate", async (msg) => {
       .setFooter({ text: "Leaderboard resets every Monday at midnight" });
     await msg.channel.send({ embeds: [embed] });
   }
+  // ── !beg ──────────────────────────────────────────────────
+  else if (cmd === "beg") {
+    ensureUser(userId, userName);
+    const kittensRole = msg.guild?.roles.cache.find(r => r.name.toLowerCase() === "kittens");
+    const roleMention = kittensRole ? `<@&${kittensRole.id}> ` : "";
+    const tauntLines = [
+      `look who's begging for my help`,
+      `absolutely pathetic — someone's desperate for kittens`,
+      `on your knees already? wow`,
+      `aw, begging like a little kitten yourself`,
+      `you really crawled in here to beg?`,
+      `can't even earn your own kittens?`,
+      `the audacity to come crawling to ME`,
+      `begging? in this economy?`,
+      `so broke you had to beg the house`,
+      `look at this little scrounger`,
+      `this is genuinely embarrassing to watch`,
+      `i almost feel bad. almost.`,
+    ];
+    const taunt = tauntLines[Math.floor(Math.random() * tauntLines.length)];
+    if (Math.random() < 0.4) {
+      const gift = Math.floor(Math.random() * 200) + 1;
+      addKittens(userId, gift);
+      await msg.channel.send(
+        `${roleMention}😂 **${taunt}** — <@${userId}>\n\n` +
+        `...fine. here's **${gift} 🐱 kittens**. don't make it weird.`
+      );
+    } else {
+      await msg.channel.send(
+        `${roleMention}😂 **${taunt}** — <@${userId}>\n\n` +
+        `the house says **no**. get a job.`
+      );
+    }
+  }
+
   else if (cmd === "cops") {
     const guild = msg.guild;
     await guild.members.fetch().catch(() => {});
