@@ -196,6 +196,41 @@ function buildLeaderboardEmbed(data, guildMembers) {
 
 // ── Blackjack helpers ──────────────────────────────────────
 const activeGames = new Map();
+const TURN_TIMEOUT_MS = 30_000;
+
+function clearTurnTimeout(game) {
+  if (game.turnTimeout) {
+    clearTimeout(game.turnTimeout);
+    game.turnTimeout = null;
+  }
+}
+
+function setTurnTimeout(channel, channelId) {
+  const game = activeGames.get(channelId);
+  if (!game) return;
+  clearTurnTimeout(game);
+  const turnPlayerId = game.turn;
+  game.turnTimeout = setTimeout(async () => {
+    const g = activeGames.get(channelId);
+    if (!g || g.turn !== turnPlayerId) return;
+    const name = g.players.find(p => p.id === g.turn).name;
+    const card = g.deck.pop();
+    g.hands[g.turn].push(card);
+    const val = handValue(g.hands[g.turn]);
+    if (val > 21) {
+      await channel.send(`⏰ **${name}** took too long — auto-hit! Drew **${card.rank}${card.suit}** and busted with **${val}**! 💥`);
+      g.stood.add(g.turn);
+      advanceTurn(channel, channelId);
+    } else if (val === 21) {
+      await channel.send(`⏰ **${name}** took too long — auto-hit! Drew **${card.rank}${card.suit}** and hit 21! ✨`);
+      g.stood.add(g.turn);
+      advanceTurn(channel, channelId);
+    } else {
+      await channel.send(`⏰ **${name}** took too long — auto-hit! Drew **${card.rank}${card.suit}** **(${val})**. Still their turn — \`!hit\` or \`!stand\``);
+      setTurnTimeout(channel, channelId);
+    }
+  }, TURN_TIMEOUT_MS);
+}
 
 function makeDeck() {
   const suits = ["♠", "♥", "♦", "♣"];
@@ -258,6 +293,7 @@ function advanceTurn(channel, channelId) {
       game.turn = next.id;
       const embed = buildGameEmbed(game);
       channel.send({ content: `➡️ **${next.name}**'s turn!`, embeds: [embed] });
+      setTurnTimeout(channel, channelId);
       return;
     }
   }
@@ -267,6 +303,7 @@ function advanceTurn(channel, channelId) {
 async function resolveBlackjack(channel, channelId) {
   const game = activeGames.get(channelId);
   if (!game) return;
+  clearTurnTimeout(game);
   activeGames.delete(channelId);
   while (handValue(game.dealerHand) < 17) game.dealerHand.push(game.deck.pop());
   const dealerVal = handValue(game.dealerHand);
@@ -312,6 +349,7 @@ async function startPvPGame(channel, channelId, players, bet) {
   const nameList = players.map(p => `**${p.name}**`).join(", ");
   const embed = buildGameEmbed(game);
   await channel.send({ content: `🃏 ${nameList} — **${bet} 🐱 kittens** each!`, embeds: [embed] });
+  setTurnTimeout(channel, channelId);
 }
 
 // ── Report-based spam tracking ─────────────────────────────
@@ -736,6 +774,7 @@ client.on("messageCreate", async (msg) => {
       const embed = buildGameEmbed(game);
       await msg.channel.send({ content: `🃏 **${userName}** plays Blackjack vs the dealer for **${bet} 🐱 kittens**!`, embeds: [embed] });
       if (handValue(hands[userId]) === 21) resolveBlackjack(msg.channel, channelId);
+      else setTurnTimeout(msg.channel, channelId);
     }
   }
 
@@ -775,6 +814,7 @@ client.on("messageCreate", async (msg) => {
     const game = activeGames.get(channelId);
     if (!game) return;
     if (msg.author.id !== game.turn) return msg.reply("❌ It's not your turn!");
+    clearTurnTimeout(game);
     const card = game.deck.pop();
     game.hands[game.turn].push(card);
     const val = handValue(game.hands[game.turn]);
@@ -798,6 +838,7 @@ client.on("messageCreate", async (msg) => {
     const game = activeGames.get(channelId);
     if (!game) return;
     if (msg.author.id !== game.turn) return msg.reply("❌ It's not your turn!");
+    clearTurnTimeout(game);
     const name = game.players.find(p => p.id === game.turn).name;
     game.stood.add(game.turn);
     await msg.channel.send(`🛑 **${name}** stands at **${handValue(game.hands[game.turn])}**.`);
