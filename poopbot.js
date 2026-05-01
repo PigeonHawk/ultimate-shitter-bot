@@ -417,6 +417,13 @@ function applySpamConsequence(userId, userName, channel) {
 
 
 
+// ── RPS helpers ───────────────────────────────────────────
+const pendingRpsGames = new Map();
+const RPS_TIMEOUT_MS = 30_000;
+const RPS_BEATS = { rock: "scissors", paper: "rock", scissors: "paper" };
+const RPS_EMOJI = { rock: "🪨", paper: "📄", scissors: "✂️" };
+const RPS_LABEL = { rock: "Rock", paper: "Paper", scissors: "Scissors" };
+
 // ── Race state ─────────────────────────────────────────────
 const activeRaces = new Map();
 
@@ -1057,6 +1064,101 @@ client.on("messageCreate", async (msg) => {
     advanceTurn(msg.channel, channelId);
   }
 
+  // ── !rps ──────────────────────────────────────────────────
+  else if (cmd === "rps") {
+    const mentionedUser = msg.mentions.users.first();
+    const bet = parseInt(args[args.length - 1]);
+
+    if (isNaN(bet) || bet <= 0) return msg.reply("❌ Usage: `!rps <bet>` or `!rps @user <bet>`");
+
+    const userKittens = getKittens(userId);
+    if (userKittens < bet) return msg.reply(`❌ You only have **${userKittens.toLocaleString()} 🐱 kittens**!`);
+
+    const rpsRow = (idPrefix) => new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`${idPrefix}_rock`).setLabel("🪨 Rock").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`${idPrefix}_paper`).setLabel("📄 Paper").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`${idPrefix}_scissors`).setLabel("✂️ Scissors").setStyle(ButtonStyle.Danger),
+    );
+
+    if (!mentionedUser) {
+      // vs house
+      const gameKey = `rps_bot_${userId}`;
+      if (pendingRpsGames.has(gameKey)) return msg.reply("❌ You already have a pending RPS game!");
+
+      const embed = new EmbedBuilder()
+        .setTitle("✂️  Rock Paper Scissors — vs House")
+        .setDescription(`**${userName}** bets **${bet.toLocaleString()} 🐱 kittens** against the house!\n\nPick your move:`)
+        .setColor(0x3498db)
+        .setFooter({ text: "30s to pick · Win doubles your bet · Tie returns it" });
+
+      const sentMsg = await msg.channel.send({
+        embeds: [embed],
+        components: [rpsRow(`rps_bot_${userId}_${bet}`)],
+      });
+
+      const timeoutHandle = setTimeout(async () => {
+        pendingRpsGames.delete(gameKey);
+        const timeoutEmbed = new EmbedBuilder()
+          .setTitle("✂️  Rock Paper Scissors — Cancelled")
+          .setDescription(`⏰ **${userName}** didn't pick in time — game cancelled.`)
+          .setColor(0x95a5a6)
+          .setTimestamp();
+        sentMsg.edit({ embeds: [timeoutEmbed], components: [] }).catch(() => {});
+      }, RPS_TIMEOUT_MS);
+
+      pendingRpsGames.set(gameKey, { userId, userName, bet, message: sentMsg, timeoutHandle });
+
+    } else {
+      // vs player
+      if (mentionedUser.id === userId) return msg.reply("❌ You can't challenge yourself!");
+      if (mentionedUser.bot) return msg.reply("❌ You can't challenge a bot!");
+
+      const targetId = mentionedUser.id;
+      ensureUser(targetId, mentionedUser.username);
+      const targetName = msg.guild?.members.cache.get(targetId)?.displayName ?? mentionedUser.username;
+      const targetKittens = getKittens(targetId);
+      if (targetKittens < bet) return msg.reply(`❌ **${targetName}** only has **${targetKittens.toLocaleString()} 🐱 kittens** — not enough!`);
+
+      const rpsKey = `rps_pvp_${userId}_${targetId}`;
+      if (pendingRpsGames.has(rpsKey)) return msg.reply("❌ You already have a pending RPS challenge against this person!");
+
+      const phaseEmbed = (desc) => new EmbedBuilder()
+        .setTitle("✂️  Rock Paper Scissors — 1v1")
+        .setDescription(desc)
+        .setColor(0x9b59b6)
+        .setFooter({ text: `${bet.toLocaleString()} 🐱 kittens each · 30s to pick` });
+
+      const sentMsg = await msg.channel.send({
+        embeds: [phaseEmbed(`<@${userId}> challenges <@${targetId}> to RPS for **${bet.toLocaleString()} 🐱 kittens** each!\n\n<@${userId}> — pick your move first. Only you will see your choice.`)],
+        components: [rpsRow(`rps_pvp_${userId}_${targetId}`)],
+      });
+
+      const makeTimeout = (name) => setTimeout(async () => {
+        pendingRpsGames.delete(rpsKey);
+        const cancelEmbed = new EmbedBuilder()
+          .setTitle("✂️  Rock Paper Scissors — Cancelled")
+          .setDescription(`⏰ **${name}** didn't respond in time — game cancelled, no kittens exchanged.`)
+          .setColor(0x95a5a6)
+          .setTimestamp();
+        sentMsg.edit({ embeds: [cancelEmbed], components: [] }).catch(() => {});
+      }, RPS_TIMEOUT_MS);
+
+      pendingRpsGames.set(rpsKey, {
+        challengerId: userId,
+        challengerName: userName,
+        targetId,
+        targetName,
+        bet,
+        challengerPick: null,
+        phase: "challenger",
+        message: sentMsg,
+        phaseEmbed,
+        rpsRow: () => rpsRow(`rps_pvp_${userId}_${targetId}`),
+        timeoutHandle: makeTimeout(userName),
+      });
+    }
+  }
+
   // ── !race ─────────────────────────────────────────────────
   else if (cmd === "race") {
     const channelId = msg.channel.id;
@@ -1212,6 +1314,8 @@ client.on("messageCreate", async (msg) => {
         { name: "`!blackjack open <bet>`", value: "Open a public table — anyone can `!join` within 30s" },
         { name: "`!hit` / `!stand`", value: "Blackjack moves during your turn" },
         { name: "`!donate @user <amount>`", value: "Donate kittens to another user" },
+        { name: "`!rps <bet>`", value: "Play Rock Paper Scissors vs the house — win doubles your bet, tie refunds it" },
+        { name: "`!rps @user <bet>`", value: "Challenge someone to 1v1 RPS — winner takes the other's bet" },
         { name: "`!rob @user <amount> [rps]`", value: "Rob a specific user — dice roll (default) or rock paper scissors · 2 robs/day" },
         { name: "`!rob <amount> [rps]`", value: "Rob a random user — win 1.5× stake on win · tie in RPS = null · 30s to respond" },
         { name: "`!cops`", value: "Ping all server admins" },
@@ -1237,10 +1341,147 @@ client.on("messageCreate", async (msg) => {
   }
 });
 
-// ── RPS rob interactions ───────────────────────────────────
+// ── RPS interactions ───────────────────────────────────────
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
   const { customId, user } = interaction;
+
+  // ── Standalone RPS — vs house ──────────────────────────
+  if (customId.startsWith("rps_bot_")) {
+    // customId: rps_bot_{userId}_{bet}_{pick}
+    const parts = customId.split("_");
+    const rpsUserId = parts[2];
+    const rpsBet = parseInt(parts[3]);
+    const pick = parts[4];
+    const gameKey = `rps_bot_${rpsUserId}`;
+
+    if (user.id !== rpsUserId) {
+      return interaction.reply({ content: "❌ This isn't your game!", ephemeral: true });
+    }
+
+    const pending = pendingRpsGames.get(gameKey);
+    if (!pending) {
+      return interaction.reply({ content: "❌ This game has already ended or expired.", ephemeral: true });
+    }
+
+    clearTimeout(pending.timeoutHandle);
+    pendingRpsGames.delete(gameKey);
+
+    const moves = ["rock", "paper", "scissors"];
+    const housePick = moves[Math.floor(Math.random() * 3)];
+    const moveLine = `${RPS_EMOJI[pick]} **${pending.userName}** picked **${RPS_LABEL[pick]}** · ${RPS_EMOJI[housePick]} **House** picked **${RPS_LABEL[housePick]}**`;
+
+    let description, color;
+    if (pick === housePick) {
+      description = `${moveLine}\n\n🤝 Tie! Your **${rpsBet.toLocaleString()} 🐱 kittens** are returned.`;
+      color = 0x95a5a6;
+    } else if (RPS_BEATS[pick] === housePick) {
+      removeKittens(rpsUserId, rpsBet);
+      addKittens(rpsUserId, rpsBet * 2);
+      description = `${moveLine}\n\n🎉 **${pending.userName}** wins **+${rpsBet.toLocaleString()} 🐱 kittens**!`;
+      color = 0x2ecc71;
+    } else {
+      removeKittens(rpsUserId, rpsBet);
+      description = `${moveLine}\n\n😔 **${pending.userName}** loses **${rpsBet.toLocaleString()} 🐱 kittens** to the house!`;
+      color = 0xe74c3c;
+    }
+
+    const finalEmbed = new EmbedBuilder()
+      .setTitle("✂️  Rock Paper Scissors — Result")
+      .setDescription(description)
+      .setColor(color)
+      .addFields({ name: pending.userName, value: `${getKittens(rpsUserId).toLocaleString()} 🐱`, inline: true })
+      .setTimestamp();
+
+    return interaction.update({ embeds: [finalEmbed], components: [] });
+  }
+
+  // ── Standalone RPS — 1v1 ──────────────────────────────
+  if (customId.startsWith("rps_pvp_")) {
+    // customId: rps_pvp_{challengerId}_{targetId}_{pick}
+    const parts = customId.split("_");
+    const challengerId = parts[2];
+    const targetId = parts[3];
+    const pick = parts[4];
+    const rpsKey = `rps_pvp_${challengerId}_${targetId}`;
+
+    const pending = pendingRpsGames.get(rpsKey);
+    if (!pending) {
+      return interaction.reply({ content: "❌ This challenge has already ended or expired.", ephemeral: true });
+    }
+
+    if (pending.phase === "challenger") {
+      if (user.id !== challengerId) {
+        return interaction.reply({ content: "❌ Wait — the challenger picks first!", ephemeral: true });
+      }
+
+      pending.challengerPick = pick;
+      pending.phase = "target";
+
+      await interaction.reply({
+        content: `🤫 You picked **${RPS_EMOJI[pick]} ${RPS_LABEL[pick]}**! Waiting for **${pending.targetName}** to respond...`,
+        ephemeral: true,
+      });
+
+      clearTimeout(pending.timeoutHandle);
+      pending.timeoutHandle = setTimeout(async () => {
+        pendingRpsGames.delete(rpsKey);
+        const cancelEmbed = new EmbedBuilder()
+          .setTitle("✂️  Rock Paper Scissors — Cancelled")
+          .setDescription(`⏰ **${pending.targetName}** didn't respond in time — game cancelled, no kittens exchanged.`)
+          .setColor(0x95a5a6)
+          .setTimestamp();
+        pending.message.edit({ embeds: [cancelEmbed], components: [] }).catch(() => {});
+      }, RPS_TIMEOUT_MS);
+
+      await pending.message.edit({
+        embeds: [pending.phaseEmbed(`**${pending.challengerName}** has locked in their move! 🔒\n\n<@${targetId}> — your turn! Pick your move:`)],
+        components: [pending.rpsRow()],
+      }).catch(() => {});
+
+    } else {
+      // target's turn
+      if (user.id !== targetId) {
+        return interaction.reply({ content: "❌ It's not your turn to pick!", ephemeral: true });
+      }
+
+      clearTimeout(pending.timeoutHandle);
+      pendingRpsGames.delete(rpsKey);
+
+      const { challengerId: cId, challengerName, targetName, bet, challengerPick } = pending;
+      const moveLine = `${RPS_EMOJI[challengerPick]} **${challengerName}** picked **${RPS_LABEL[challengerPick]}** · ${RPS_EMOJI[pick]} **${targetName}** picked **${RPS_LABEL[pick]}**`;
+
+      let description, color;
+      if (challengerPick === pick) {
+        description = `${moveLine}\n\n🤝 Tie! Both players keep their **${bet.toLocaleString()} 🐱 kittens**.`;
+        color = 0x95a5a6;
+      } else if (RPS_BEATS[challengerPick] === pick) {
+        removeKittens(targetId, bet);
+        addKittens(cId, bet);
+        description = `${moveLine}\n\n🎉 **${challengerName}** wins **${bet.toLocaleString()} 🐱 kittens** from **${targetName}**!`;
+        color = 0x2ecc71;
+      } else {
+        removeKittens(cId, bet);
+        addKittens(targetId, bet);
+        description = `${moveLine}\n\n🎉 **${targetName}** wins **${bet.toLocaleString()} 🐱 kittens** from **${challengerName}**!`;
+        color = 0x9b59b6;
+      }
+
+      const finalEmbed = new EmbedBuilder()
+        .setTitle("✂️  Rock Paper Scissors — Result")
+        .setDescription(description)
+        .setColor(color)
+        .addFields(
+          { name: challengerName, value: `${getKittens(cId).toLocaleString()} 🐱`, inline: true },
+          { name: targetName, value: `${getKittens(targetId).toLocaleString()} 🐱`, inline: true },
+        )
+        .setTimestamp();
+
+      return interaction.update({ embeds: [finalEmbed], components: [] });
+    }
+    return;
+  }
+
   if (!customId.startsWith("rob_rps_")) return;
 
   // customId format: rob_rps_{robberId}_{targetId}_{pick}
