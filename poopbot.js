@@ -1214,6 +1214,7 @@ client.on("messageCreate", async (msg) => {
         { name: "`!donate @user <amount>`", value: "Donate kittens to another user" },
         { name: "`!rob @user <amount> [rps]`", value: "Rob a specific user — dice roll (default) or rock paper scissors · 2 robs/day" },
         { name: "`!rob <amount> [rps]`", value: "Rob a random user — win 1.5× stake on win · tie in RPS = null · 30s to respond" },
+        { name: "`!cops`", value: "Ping all server admins" },
         { name: "`!report @user`", value: "Report a user for spam — 2 reports triggers a 300 🐱 penalty + 2 min freeze" },
         { name: "⚡ Quick pooper bonus", value: "Poop within 2 hours of your last for +1.5 points!" },
         { name: "🐱 Earning kittens", value: "5 kittens per message · 5 kittens per minute in VC" },
@@ -1223,6 +1224,16 @@ client.on("messageCreate", async (msg) => {
       .setColor(0x8b4513)
       .setFooter({ text: "Leaderboard resets every Monday at midnight" });
     await msg.channel.send({ embeds: [embed] });
+  }
+  else if (cmd === "cops") {
+    const guild = msg.guild;
+    await guild.members.fetch().catch(() => {});
+    const admins = guild.members.cache.filter(
+      (m) => !m.user.bot && m.permissions.has("Administrator")
+    );
+    if (admins.size === 0) return msg.reply("No admins found.");
+    const mentions = admins.map((m) => `<@${m.id}>`).join(" ");
+    await msg.channel.send(`🚔 ${mentions}`);
   }
 });
 
