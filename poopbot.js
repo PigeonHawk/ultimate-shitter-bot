@@ -314,41 +314,35 @@ async function startPvPGame(channel, channelId, players, bet) {
   await channel.send({ content: `🃏 ${nameList} — **${bet} 🐱 kittens** each!`, embeds: [embed] });
 }
 
-// ── Anti-spam tracking ─────────────────────────────────────
-const recentMessages = new Map(); // userId -> { lastMessage, messageCount, windowStart, frozenUntil }
+// ── Report-based spam tracking ─────────────────────────────
+const REPORT_WINDOW_MS = 10 * 60 * 1000; // both reports must arrive within 10 minutes
+// spamReports: userId -> { reporters: Set<reporterId>, windowStart: timestamp }
+const spamReports = new Map();
+// reporterDailyUsage: reporterId -> YYYY-MM-DD of last report filed
+const reporterDailyUsage = new Map();
+// frozenUsers: userId -> frozenUntil timestamp
+const frozenUsers = new Map();
 
-function canEarnKittens(userId, content) {
-  const now = Date.now();
-  const ONE_MINUTE = 60 * 1000;
-  const tracker = recentMessages.get(userId) ?? { lastMessage: null, messageCount: 0, windowStart: now, frozenUntil: 0 };
+function isKittenFrozen(userId) {
+  const frozenUntil = frozenUsers.get(userId);
+  if (!frozenUntil) return false;
+  if (Date.now() < frozenUntil) return true;
+  frozenUsers.delete(userId);
+  return false;
+}
 
-  // If frozen, block earning silently
-  if (tracker.frozenUntil && now < tracker.frozenUntil) {
-    recentMessages.set(userId, tracker);
-    return { earn: false, spam: false, frozen: true };
+function applySpamConsequence(userId, userName, channel) {
+  const before = db.users[userId]?.kittens ?? 0;
+  if (db.users[userId]) {
+    db.users[userId].kittens = Math.max(0, before - 300);
+    saveData(db);
   }
-
-  // Reset window every minute (only if not frozen)
-  if (now - tracker.windowStart > ONE_MINUTE) {
-    tracker.messageCount = 0;
-    tracker.windowStart = now;
-  }
-
-  // Check for spam: duplicate message or short message after 5
-  const isDuplicate = tracker.lastMessage && tracker.lastMessage.toLowerCase() === content.toLowerCase();
-  const isTooShort = tracker.messageCount >= 5 && content.trim().length < 5;
-
-  if (isDuplicate || isTooShort) {
-    // Freeze for 5 minutes
-    tracker.frozenUntil = now + 2 * 60 * 1000;
-    recentMessages.set(userId, tracker);
-    return { earn: false, spam: true, frozen: false };
-  }
-
-  tracker.lastMessage = content;
-  tracker.messageCount += 1;
-  recentMessages.set(userId, tracker);
-  return { earn: true, spam: false, frozen: false };
+  frozenUsers.set(userId, Date.now() + 2 * 60 * 1000);
+  spamReports.delete(userId);
+  channel.send(
+    `🚨 **SPAM ALERT: ${userName} has been reported by multiple users!**\n` +
+    `**${userName}** has been deducted **300 🐱 kittens** and kitten earning is **frozen for 2 minutes**.`
+  ).catch(() => {});
 }
 
 
@@ -440,23 +434,11 @@ client.on("messageCreate", async (msg) => {
   const userId = msg.author.id;
   const userName = msg.member?.displayName ?? msg.author.username;
 
-  // Earn kittens for every message (anti-spam protected)
+  // Earn kittens for every message (frozen if reported by 2+ users)
   ensureUser(userId, userName);
-  const isCommand = msg.content.startsWith(PREFIX);
-  const kittenCheck = isCommand ? { earn: true, spam: false, frozen: false } : canEarnKittens(userId, msg.content);
-  if (kittenCheck.earn) {
+  if (!isKittenFrozen(userId)) {
     db.users[userId].kittens = (db.users[userId].kittens ?? 0) + KITTENS_PER_MESSAGE;
     saveData(db);
-  } else if (kittenCheck.spam) {
-    // Deduct 50 kittens and freeze for 5 minutes
-    const before = db.users[userId].kittens ?? 0;
-    db.users[userId].kittens = Math.max(0, before - 300);
-    saveData(db);
-    await msg.reply(
-      `🚨 **SPAM DETECTED, ${userName}!**\n` +
-      `You've been deducted **300 🐱 kittens** and your kitten earning is **frozen for 2 minutes**.\n` +
-      `Stop sending repeated or short messages to farm kittens!`
-    ).catch(() => {});
   }
 
   // ── Race word detection ──────────────────────────────────
@@ -884,6 +866,47 @@ client.on("messageCreate", async (msg) => {
     return msg.reply("❌ Nothing to join right now. Start a race with `!race` or an open table with `!blackjack open <bet>`!");
   }
 
+  // ── !report ───────────────────────────────────────────────
+  else if (cmd === "report") {
+    const target = msg.mentions.users.first();
+    if (!target) return msg.reply("❌ Usage: `!report @user`");
+    if (target.id === userId) return msg.reply("❌ You can't report yourself.");
+    if (target.bot) return msg.reply("❌ You can't report a bot.");
+
+    // Daily limit: one report filed per reporter per day
+    const today = todayStr();
+    if (reporterDailyUsage.get(userId) === today) {
+      return msg.reply("❌ You've already filed a report today. You can report again tomorrow.");
+    }
+
+    const now = Date.now();
+    let entry = spamReports.get(target.id);
+
+    // If an existing report window has expired, reset it
+    if (entry && now - entry.windowStart > REPORT_WINDOW_MS) {
+      entry = null;
+      spamReports.delete(target.id);
+    }
+
+    if (!entry) {
+      entry = { reporters: new Set(), windowStart: now };
+      spamReports.set(target.id, entry);
+    }
+
+    if (entry.reporters.has(userId)) return msg.reply("❌ You've already reported this user.");
+    entry.reporters.add(userId);
+    reporterDailyUsage.set(userId, today);
+
+    const targetName = msg.guild?.members.cache.get(target.id)?.displayName ?? target.username;
+    if (entry.reporters.size >= 2) {
+      ensureUser(target.id, targetName);
+      applySpamConsequence(target.id, targetName, msg.channel);
+    } else {
+      const windowMinutes = Math.round(REPORT_WINDOW_MS / 60000);
+      await msg.reply(`✅ **${targetName}** has been reported. **1/2** reports — one more report within **${windowMinutes} minutes** will trigger a penalty.`);
+    }
+  }
+
   // ── !editscore ────────────────────────────────────────────
   else if (cmd === "editscore") {
     const password = args[0];
@@ -935,6 +958,7 @@ client.on("messageCreate", async (msg) => {
         { name: "`!blackjack @user1 [@user2 ...] <bet>`", value: "Challenge one or more people to blackjack" },
         { name: "`!blackjack open <bet>`", value: "Open a public table — anyone can `!join` within 30s" },
         { name: "`!hit` / `!stand`", value: "Blackjack moves during your turn" },
+        { name: "`!report @user`", value: "Report a user for spam — 2 reports triggers a 300 🐱 penalty + 2 min freeze" },
         { name: "⚡ Quick pooper bonus", value: "Poop within 2 hours of your last for +1.5 points!" },
         { name: "🐱 Earning kittens", value: "5 kittens per message · 5 kittens per minute in VC" },
         { name: "Today's double-point windows", value: windowList || "None today" },
