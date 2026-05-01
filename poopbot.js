@@ -431,6 +431,46 @@ const RPS_BEATS = { rock: "scissors", paper: "rock", scissors: "paper" };
 const RPS_EMOJI = { rock: "🪨", paper: "📄", scissors: "✂️" };
 const RPS_LABEL = { rock: "Rock", paper: "Paper", scissors: "Scissors" };
 
+// ── Slots helpers ──────────────────────────────────────────
+const SLOTS_SYMBOLS = [
+  { emoji: "💩", weight: 1  },
+  { emoji: "🐱", weight: 3  },
+  { emoji: "💎", weight: 5  },
+  { emoji: "⭐", weight: 8  },
+  { emoji: "🍒", weight: 12 },
+  { emoji: "🔔", weight: 12 },
+  { emoji: "🍋", weight: 14 },
+];
+const SLOTS_TOTAL_WEIGHT = SLOTS_SYMBOLS.reduce((s, x) => s + x.weight, 0);
+
+const SLOTS_PAYOUTS = {
+  "💩💩💩": 50,
+  "🐱🐱🐱": 15,
+  "💎💎💎": 8,
+  "⭐⭐⭐":  4,
+  "🍒🍒🍒": 3,
+  "🔔🔔🔔": 3,
+  "🍋🍋🍋": 2,
+};
+
+function spinReel() {
+  let r = Math.floor(Math.random() * SLOTS_TOTAL_WEIGHT);
+  for (const s of SLOTS_SYMBOLS) {
+    if (r < s.weight) return s.emoji;
+    r -= s.weight;
+  }
+  return SLOTS_SYMBOLS[SLOTS_SYMBOLS.length - 1].emoji;
+}
+
+function getSlotsResult(reels) {
+  const key = reels.join("");
+  if (SLOTS_PAYOUTS[key]) return { multiplier: SLOTS_PAYOUTS[key] };
+  const counts = {};
+  for (const r of reels) counts[r] = (counts[r] ?? 0) + 1;
+  if ((counts["💩"] ?? 0) >= 2 || (counts["🐱"] ?? 0) >= 2) return { multiplier: 1 };
+  return { multiplier: 0 };
+}
+
 // ── Race state ─────────────────────────────────────────────
 const activeRaces = new Map();
 
@@ -1385,6 +1425,48 @@ client.on("messageCreate", async (msg) => {
         `the house says **no**. get a job.`
       );
     }
+  }
+
+  // ── !slots ────────────────────────────────────────────────
+  else if (cmd === "slots") {
+    const bet = parseInt(args[0]);
+    if (isNaN(bet) || bet <= 0) return msg.reply("Usage: `!slots <bet>`");
+    const userKittens = getKittens(userId);
+    if (userKittens < bet) return msg.reply(`❌ You only have **${userKittens.toLocaleString()} 🐱 kittens**!`);
+
+    removeKittens(userId, bet);
+    const reels = [spinReel(), spinReel(), spinReel()];
+    const { multiplier } = getSlotsResult(reels);
+    if (multiplier > 0) addKittens(userId, bet * multiplier);
+
+    const reelDisplay = reels.join("  ");
+    let title, description, color;
+    if (multiplier >= 50) {
+      title = "🎰  JACKPOT!!! 💩💩💩";
+      description = `# ${reelDisplay}\n\n🏆 **HOLY SHIT!** You won **${(bet * multiplier).toLocaleString()} 🐱 kittens**! (${multiplier}x)`;
+      color = 0xf1c40f;
+    } else if (multiplier > 1) {
+      title = "🎰  Winner!";
+      description = `# ${reelDisplay}\n\n🎉 You won **${(bet * multiplier).toLocaleString()} 🐱 kittens**! (${multiplier}x)`;
+      color = 0x2ecc71;
+    } else if (multiplier === 1) {
+      title = "🎰  So close...";
+      description = `# ${reelDisplay}\n\n🤝 Rare pair — bet returned! (**${bet.toLocaleString()} 🐱**)`;
+      color = 0x95a5a6;
+    } else {
+      title = "🎰  Slots";
+      description = `# ${reelDisplay}\n\n😔 No match — lost **${bet.toLocaleString()} 🐱 kittens**.`;
+      color = 0xe74c3c;
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle(title)
+      .setDescription(description)
+      .setColor(color)
+      .addFields({ name: userName, value: `${getKittens(userId).toLocaleString()} 🐱`, inline: true })
+      .setFooter({ text: "💩=50x · 🐱=15x · 💎=8x · ⭐=4x · 🍒/🔔=3x · 🍋=2x · Two 💩/🐱 = push" })
+      .setTimestamp();
+    await msg.channel.send({ embeds: [embed] });
   }
 
   else if (cmd === "cops") {
