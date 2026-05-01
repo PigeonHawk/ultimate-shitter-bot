@@ -1359,6 +1359,7 @@ client.on("messageCreate", async (msg) => {
         { name: "`!blackjack @user1 [@user2 ...] <bet>`", value: "Challenge one or more people to blackjack" },
         { name: "`!blackjack open <bet>`", value: "Open a public table — anyone can `!join` within 30s" },
         { name: "`!blackjack` buttons", value: "Hit / Stand buttons appear during your turn" },
+        { name: "`!slots <bet>`", value: "Spin the slot machine — match symbols to win big, 💩💩💩 pays 50×" },
         { name: "`!donate @user <amount>`", value: "Donate kittens to another user" },
         { name: "`!rps <bet>`", value: "Play Rock Paper Scissors vs the house — win doubles your bet, tie refunds it" },
         { name: "`!rps @user <bet>`", value: "Challenge someone to 1v1 RPS — winner takes the other's bet" },
