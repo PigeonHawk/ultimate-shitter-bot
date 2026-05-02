@@ -2372,7 +2372,7 @@ client.on("messageCreate", async (msg) => {
         { name: "`!beg`", value: "Beg the house for kittens — 40% chance of 1–200 🐱, 100% chance of humiliation" },
         { name: "`!jackpot` / `!megajackpot`", value: "Buy a jackpot ticket (**10 🐱**, 1 in 50) or mega jackpot ticket (**50 🐱**, 1 in 100) — winner takes the whole pot · `!jackpot info` / `!megajackpot info` to see current pots" },
         { name: "`!crash <bet>`", value: "Bet kittens on a growing multiplier — cash out before it crashes! Others can join with the same bet. (3% house edge, max 2,000 🐱)" },
-        { name: "`!heist <bet>`", value: "Recruit a crew and rob a random rich user — 30% + 10% per member success chance (max 80%). Others join with the same command. (max 1,000 🐱 ante)" },
+        { name: "`!heist <bet>`", value: "Recruit a crew and rob a rich user — 10% + 10% per member success chance (max 80%). Richer targets are more likely to be chosen. Others join with the same command. (max 1,000 🐱 ante)" },
         { name: "`!russian <bet>`", value: "Russian roulette — 1 in 6 chance the gun fires on you. Survivors split the dead players' bets. Type to join others. (max 1,500 🐱)" },
       )
       .setColor(0xf1c40f)
@@ -2847,7 +2847,7 @@ client.on("messageCreate", async (msg) => {
       if (bal < bet) return msg.reply(`❌ You only have **${bal.toLocaleString()} 🐱 kittens**!`);
       removeKittens(userId, bet);
       existing.crew.set(userId, userName);
-      return msg.reply(`✅ **${userName}** joined the heist! Crew: **${existing.crew.size}** (success chance: ${Math.round(Math.min(0.80, 0.30 + existing.crew.size * 0.10) * 100)}%)`);
+      return msg.reply(`✅ **${userName}** joined the heist! Crew: **${existing.crew.size}** (success chance: ${Math.round(Math.min(0.80, 0.10 + existing.crew.size * 0.10) * 100)}%)`);
     }
 
     if (existing) return msg.reply("❌ A heist is already being planned in this channel!");
@@ -2860,7 +2860,7 @@ client.on("messageCreate", async (msg) => {
 
     const embed = new EmbedBuilder()
       .setTitle("🦹  Heist — Recruiting Crew")
-      .setDescription(`**${userName}** is planning a heist!\nAnte: **${bet.toLocaleString()} 🐱 kittens**\n\nType \`!heist ${bet}\` to join! Launching in **20 seconds**.\n\n*More crew = better odds (30% + 10% per member, max 80%)*`)
+      .setDescription(`**${userName}** is planning a heist!\nAnte: **${bet.toLocaleString()} 🐱 kittens**\n\nType \`!heist ${bet}\` to join! Launching in **20 seconds**.\n\n*More crew = better odds (10% + 10% per member, max 80%)*`)
       .setColor(0xe67e22)
       .setFooter({ text: "Target is chosen at launch based on crew size" })
       .setTimestamp();
@@ -2873,7 +2873,7 @@ client.on("messageCreate", async (msg) => {
       activeHeists.delete(msg.channel.id);
 
       const crewSize = h.crew.size;
-      const successChance = Math.min(0.80, 0.30 + crewSize * 0.10);
+      const successChance = Math.min(0.80, 0.10 + crewSize * 0.10);
       const totalPot = crewSize * h.betAmount;
       const crewList = [...h.crew.values()].map(n => `• ${n}`).join("\n");
 
@@ -2891,7 +2891,9 @@ client.on("messageCreate", async (msg) => {
         });
       }
 
-      const [targetId, targetUser] = eligible[Math.floor(Math.random() * eligible.length)];
+      const totalWeight = eligible.reduce((sum, [, u]) => sum + (u.kittens ?? 0), 0);
+      let pick = Math.random() * totalWeight;
+      const [targetId, targetUser] = eligible.find(([, u]) => (pick -= u.kittens ?? 0) <= 0) ?? eligible[eligible.length - 1];
       const targetName = msg.guild?.members.cache.get(targetId)?.displayName ?? targetUser.name ?? `User ${targetId}`;
       const success = Math.random() < successChance;
 
