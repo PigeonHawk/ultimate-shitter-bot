@@ -1057,6 +1057,66 @@ const activeRaces = new Map();
 // ── Trivia state ───────────────────────────────────────────
 const activeTrivias = new Map();
 
+// ── Crash helpers ──────────────────────────────────────────
+function generateCrashPoint() {
+  const r = Math.random();
+  return Math.min(1000, Math.max(1.00, parseFloat((0.97 / r).toFixed(2))));
+}
+
+function buildCrashEmbed(crash, crashed = false) {
+  const multStr = crashed
+    ? `💥 **CRASHED** at ${crash.crashPoint.toFixed(2)}x!`
+    : `📈 **${crash.multiplier.toFixed(2)}x** and climbing...`;
+  const lines = [...crash.bets.entries()].map(([id, info]) => {
+    if (info.cashedAt !== null) {
+      const profit = Math.floor(info.bet * info.cashedAt) - info.bet;
+      return `✅ <@${id}> cashed out at **${info.cashedAt.toFixed(2)}x** (+${profit.toLocaleString()} 🐱)`;
+    }
+    return crashed
+      ? `💥 <@${id}> lost **${info.bet.toLocaleString()} 🐱**`
+      : `⏳ <@${id}> — **${info.bet.toLocaleString()} 🐱** riding`;
+  });
+  return new EmbedBuilder()
+    .setTitle(crashed ? "📈  Crash — CRASHED! 💥" : "📈  Crash")
+    .setDescription([multStr, "", ...lines].join("\n"))
+    .setColor(crashed ? 0xe74c3c : 0x2ecc71)
+    .setTimestamp();
+}
+
+// ── WYR question bank ──────────────────────────────────────
+const WYR_QUESTIONS = [
+  { a: "Poop once a year (extremely painful, a full year's worth)", b: "Poop 20 times a day every single day" },
+  { a: "Your farts smell like roses but sound like foghorns", b: "Your farts are completely silent but smell like the apocalypse" },
+  { a: "Never be able to flush a toilet again", b: "Never be able to wash your hands after pooping" },
+  { a: "Use a cactus as toilet paper", b: "Wipe with wet sand" },
+  { a: "Poop your pants once a month in public with everyone knowing", b: "Poop your pants once a week in private" },
+  { a: "Have a transparent bathroom with opaque walls", b: "Have an opaque bathroom with transparent walls" },
+  { a: "Only use public restrooms for the rest of your life", b: "Never be able to use a restroom when you actually need one" },
+  { a: "Have Dwayne Johnson narrate every one of your bathroom trips", b: "Have Gordon Ramsay critique your technique every time" },
+  { a: "Poop glitter for a week straight", b: "Poop spaghetti exactly once" },
+  { a: "Your poop is solid gold but you have to sell it to strangers", b: "Normal poop but it smells like fresh-baked cookies" },
+  { a: "Accidentally send your boss a toilet selfie", b: "Your boss walks in on you in the work bathroom" },
+  { a: "Only poop in a bucket like a medieval peasant forever", b: "Only poop in a porta-potty at a music festival forever" },
+  { a: "Get an urgent poop urge in the middle of every important meeting", b: "Only be able to poop at exactly 3 AM every day" },
+  { a: "Your farts sound like anime attack names out loud", b: "Your farts blast your ringtone at full volume" },
+  { a: "Poop in zero gravity on a space station", b: "Poop in a submarine with 20 other people" },
+  { a: "Announce every bathroom visit to your entire contact list", b: "Every bathroom visit is livestreamed to 3 random strangers" },
+  { a: "Your poop is bright neon green forever", b: "Your poop makes a loud honking sound on impact" },
+  { a: "Never poop again but survive magically", b: "Poop every 15 minutes for the rest of your life" },
+  { a: "Always need to poop 5 minutes after sitting in traffic", b: "Always need to poop right as you fall asleep" },
+  { a: "Your poop smells like your favorite food", b: "Your favorite food tastes exactly like poop" },
+  { a: "Have to narrate your pooping like a nature documentary", b: "A live audience of strangers applauds after every successful flush" },
+  { a: "Wipe with dry leaves forever", b: "Wipe with bubble wrap forever" },
+  { a: "Only be able to use Discord while on the toilet", b: "Never be able to use your phone on the toilet ever again" },
+  { a: "Toilet paper always runs out at the worst possible moment", b: "The toilet always clogs no matter what you do" },
+];
+
+// ── Per-channel game state ─────────────────────────────────
+const activeCrashes = new Map();
+const activeWyrs = new Map();
+const activeHeists = new Map();
+const activeRussians = new Map();
+
 async function revealTrivia(trivia) {
   const { bet, participants, answers, question, letters, questionMsg } = trivia;
   const optionsText = question.options.map((opt, i) => `**${letters[i]}.** ${opt}`).join("\n");
@@ -2302,6 +2362,11 @@ client.on("messageCreate", async (msg) => {
         { name: "`!beg`", value: "Beg the house for kittens — 40% chance of 1–200 🐱, 100% chance of humiliation" },
         { name: "`!jackpot` / `!megajackpot`", value: "Buy a jackpot ticket (**10 🐱**, 1 in 50) or mega jackpot ticket (**50 🐱**, 1 in 100) — winner takes the whole pot · `!jackpot info` / `!megajackpot info` to see current pots" },
         { name: "`!taxes`", value: "Check today's tax jackpot pool — 5% of everyone's kittens are collected daily at 2 PM PST and awarded to a random winner (poorer users have better odds)" },
+        { name: "`!crash <bet>`", value: "Bet kittens on a growing multiplier — cash out before it crashes! Others can join with the same bet. (3% house edge, max 2,000 🐱)" },
+        { name: "`!heist <bet>`", value: "Recruit a crew and rob a random rich user — 30% + 10% per member success chance (max 80%). Others join with the same command. (max 1,000 🐱 ante)" },
+        { name: "`!russian <bet>`", value: "Russian roulette — 1 in 6 chance the gun fires on you. Survivors split the dead players' bets. Type to join others. (max 1,500 🐱)" },
+        { name: "`!wyr`", value: "Post a 'Would You Rather' poll — vote with buttons, results revealed after 30 seconds" },
+        { name: "`!daily`", value: "Claim a free 150–250 🐱 kittens once per day" },
         { name: "`!cops`", value: "Ping all server admins" },
         { name: "`!report @user`", value: "Report a user for spam — 2 reports triggers a 300 🐱 penalty + 2 min freeze" },
         { name: "⚡ Quick pooper bonus", value: "Poop within 2 hours of your last for +1.5 points!" },
@@ -2648,6 +2713,327 @@ client.on("messageCreate", async (msg) => {
     }
   }
 
+  // ── !crash ────────────────────────────────────────────────
+  else if (cmd === "crash") {
+    ensureUser(userId, userName);
+    const bet = parseInt(args[0]);
+    if (isNaN(bet) || bet <= 0) return msg.reply("Usage: `!crash <bet>`");
+    if (bet > 2000) return msg.reply("❌ Max crash bet is **2,000 🐱 kittens**!");
+
+    const existing = activeCrashes.get(msg.channel.id);
+
+    if (existing && existing.phase === "joining") {
+      if (existing.bets.has(userId)) return msg.reply("❌ You're already in this crash game!");
+      if (bet !== existing.betAmount) return msg.reply(`❌ This game's bet is **${existing.betAmount.toLocaleString()} 🐱**!`);
+      const bal = getKittens(userId);
+      if (bal < bet) return msg.reply(`❌ You only have **${bal.toLocaleString()} 🐱 kittens**!`);
+      removeKittens(userId, bet);
+      existing.bets.set(userId, { name: userName, bet, cashedAt: null });
+      return msg.reply(`✅ **${userName}** joined the crash for **${bet.toLocaleString()} 🐱 kittens**!`);
+    }
+
+    if (existing) return msg.reply("❌ A crash game is already in the air in this channel!");
+
+    const bal = getKittens(userId);
+    if (bal < bet) return msg.reply(`❌ You only have **${bal.toLocaleString()} 🐱 kittens**!`);
+
+    removeKittens(userId, bet);
+    const crashPoint = generateCrashPoint();
+    const crash = {
+      phase: "joining",
+      betAmount: bet,
+      crashPoint,
+      bets: new Map([[userId, { name: userName, bet, cashedAt: null }]]),
+      multiplier: 1.00,
+      interval: null,
+      message: null,
+    };
+    activeCrashes.set(msg.channel.id, crash);
+
+    const cashOutRow = () => new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`crash_cashout_${msg.channel.id}`).setLabel("💰 Cash Out").setStyle(ButtonStyle.Success)
+    );
+
+    const sentMsg = await msg.channel.send({
+      content: `📈 **Crash starting!** Bet: **${bet.toLocaleString()} 🐱** — type \`!crash ${bet}\` to join! Launching in **15 seconds**...`,
+      embeds: [buildCrashEmbed(crash)],
+    });
+    crash.message = sentMsg;
+
+    setTimeout(async () => {
+      const c = activeCrashes.get(msg.channel.id);
+      if (!c || c.phase !== "joining") return;
+      c.phase = "flying";
+
+      await sentMsg.edit({
+        content: "📈 **Crash is live! Cash out before it crashes!**",
+        embeds: [buildCrashEmbed(c)],
+        components: [cashOutRow()],
+      }).catch(() => {});
+
+      c.interval = setInterval(async () => {
+        const game = activeCrashes.get(msg.channel.id);
+        if (!game || game.phase !== "flying") { clearInterval(c.interval); return; }
+
+        game.multiplier = parseFloat((game.multiplier * 1.06).toFixed(2));
+
+        if (game.multiplier >= game.crashPoint) {
+          game.phase = "crashed";
+          clearInterval(game.interval);
+          activeCrashes.delete(msg.channel.id);
+          await sentMsg.edit({ content: null, embeds: [buildCrashEmbed(game, true)], components: [] }).catch(() => {});
+        } else {
+          await sentMsg.edit({ embeds: [buildCrashEmbed(game)], components: [cashOutRow()] }).catch(() => {});
+        }
+      }, 2000);
+    }, 15_000);
+  }
+
+  // ── !wyr ──────────────────────────────────────────────────
+  else if (cmd === "wyr") {
+    if (activeWyrs.has(msg.channel.id)) return msg.reply("❌ A WYR question is already active in this channel!");
+
+    const q = WYR_QUESTIONS[Math.floor(Math.random() * WYR_QUESTIONS.length)];
+    const votes = { a: new Set(), b: new Set() };
+
+    const buildWyrEmbed = (revealed = false) => {
+      const aCount = votes.a.size;
+      const bCount = votes.b.size;
+      const total = aCount + bCount;
+      let desc = `**🅰️  ${q.a}**\n\nvs.\n\n**🅱️  ${q.b}**`;
+      if (revealed && total > 0) {
+        const aBar = Math.round((aCount / total) * 10);
+        const bBar = Math.round((bCount / total) * 10);
+        desc += `\n\n**Results:**\n🅰️ ${"█".repeat(aBar)}${"░".repeat(10 - aBar)} ${aCount} vote${aCount !== 1 ? "s" : ""} (${Math.round((aCount / total) * 100)}%)\n🅱️ ${"█".repeat(bBar)}${"░".repeat(10 - bBar)} ${bCount} vote${bCount !== 1 ? "s" : ""} (${Math.round((bCount / total) * 100)}%)`;
+      } else if (revealed) {
+        desc += "\n\n*No votes were cast!*";
+      }
+      return new EmbedBuilder()
+        .setTitle("🤔  Would You Rather?")
+        .setDescription(desc)
+        .setColor(revealed ? 0xf1c40f : 0x9b59b6)
+        .setFooter({ text: revealed ? `${total} total vote${total !== 1 ? "s" : ""}` : "Vote below! Results in 30 seconds." })
+        .setTimestamp();
+    };
+
+    const wyrRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`wyr_a_${msg.channel.id}`).setLabel("🅰️ Option A").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`wyr_b_${msg.channel.id}`).setLabel("🅱️ Option B").setStyle(ButtonStyle.Danger),
+    );
+
+    const sentMsg = await msg.channel.send({ embeds: [buildWyrEmbed()], components: [wyrRow] });
+    activeWyrs.set(msg.channel.id, { q, votes, buildWyrEmbed });
+
+    setTimeout(async () => {
+      activeWyrs.delete(msg.channel.id);
+      await sentMsg.edit({ embeds: [buildWyrEmbed(true)], components: [] }).catch(() => {});
+    }, 30_000);
+  }
+
+  // ── !heist ────────────────────────────────────────────────
+  else if (cmd === "heist") {
+    ensureUser(userId, userName);
+    const bet = parseInt(args[0]);
+    if (isNaN(bet) || bet <= 0) return msg.reply("Usage: `!heist <bet>`");
+    if (bet > 1000) return msg.reply("❌ Max heist ante is **1,000 🐱 kittens**!");
+
+    const existing = activeHeists.get(msg.channel.id);
+
+    if (existing && existing.phase === "joining") {
+      if (existing.crew.has(userId)) return msg.reply("❌ You're already in this heist!");
+      if (bet !== existing.betAmount) return msg.reply(`❌ This heist's ante is **${existing.betAmount.toLocaleString()} 🐱**!`);
+      const bal = getKittens(userId);
+      if (bal < bet) return msg.reply(`❌ You only have **${bal.toLocaleString()} 🐱 kittens**!`);
+      removeKittens(userId, bet);
+      existing.crew.set(userId, userName);
+      return msg.reply(`✅ **${userName}** joined the heist! Crew: **${existing.crew.size}** (success chance: ${Math.round(Math.min(0.80, 0.30 + existing.crew.size * 0.10) * 100)}%)`);
+    }
+
+    if (existing) return msg.reply("❌ A heist is already being planned in this channel!");
+
+    const bal = getKittens(userId);
+    if (bal < bet) return msg.reply(`❌ You only have **${bal.toLocaleString()} 🐱 kittens**!`);
+
+    removeKittens(userId, bet);
+    activeHeists.set(msg.channel.id, { phase: "joining", betAmount: bet, crew: new Map([[userId, userName]]) });
+
+    const embed = new EmbedBuilder()
+      .setTitle("🦹  Heist — Recruiting Crew")
+      .setDescription(`**${userName}** is planning a heist!\nAnte: **${bet.toLocaleString()} 🐱 kittens**\n\nType \`!heist ${bet}\` to join! Launching in **20 seconds**.\n\n*More crew = better odds (30% + 10% per member, max 80%)*`)
+      .setColor(0xe67e22)
+      .setFooter({ text: "Target is chosen at launch based on crew size" })
+      .setTimestamp();
+    await msg.channel.send({ embeds: [embed] });
+
+    setTimeout(async () => {
+      const h = activeHeists.get(msg.channel.id);
+      if (!h || h.phase !== "joining") return;
+      h.phase = "complete";
+      activeHeists.delete(msg.channel.id);
+
+      const crewSize = h.crew.size;
+      const successChance = Math.min(0.80, 0.30 + crewSize * 0.10);
+      const totalPot = crewSize * h.betAmount;
+      const crewList = [...h.crew.values()].map(n => `• ${n}`).join("\n");
+
+      const eligible = Object.entries(db.users).filter(
+        ([id, u]) => !h.crew.has(id) && (u.kittens ?? 0) >= totalPot
+      );
+
+      if (eligible.length === 0) {
+        for (const [id] of h.crew) addKittens(id, h.betAmount);
+        return msg.channel.send({
+          embeds: [new EmbedBuilder()
+            .setTitle("🦹  Heist — Aborted")
+            .setDescription(`No target found with **${totalPot.toLocaleString()} 🐱**. Antes refunded.\n\n**Crew:**\n${crewList}`)
+            .setColor(0x95a5a6).setTimestamp()],
+        });
+      }
+
+      const [targetId, targetUser] = eligible[Math.floor(Math.random() * eligible.length)];
+      const targetName = msg.guild?.members.cache.get(targetId)?.displayName ?? targetUser.name ?? `User ${targetId}`;
+      const success = Math.random() < successChance;
+
+      if (success) {
+        removeKittens(targetId, totalPot);
+        const share = Math.floor(totalPot / crewSize);
+        for (const [id] of h.crew) addKittens(id, h.betAmount + share);
+        await msg.channel.send({
+          embeds: [new EmbedBuilder()
+            .setTitle("🦹  Heist — SUCCESS! 💰")
+            .setDescription(
+              `The crew pulled it off! Robbed **${targetName}** for **${totalPot.toLocaleString()} 🐱**!\n` +
+              `Each crew member nets **+${share.toLocaleString()} 🐱** profit!\n\n**Crew (${crewSize}):**\n${crewList}`
+            )
+            .addFields({ name: targetName, value: `${getKittens(targetId).toLocaleString()} 🐱 remaining`, inline: true })
+            .setColor(0x2ecc71).setFooter({ text: `Success chance was ${Math.round(successChance * 100)}%` }).setTimestamp()],
+        });
+      } else {
+        await msg.channel.send({
+          embeds: [new EmbedBuilder()
+            .setTitle("🦹  Heist — BUSTED! 🚔")
+            .setDescription(
+              `The crew got caught! **${targetName}** was tipped off.\n` +
+              `All **${totalPot.toLocaleString()} 🐱** in antes are lost.\n\n**Crew (${crewSize}):**\n${crewList}`
+            )
+            .setColor(0xe74c3c).setFooter({ text: `Success chance was ${Math.round(successChance * 100)}% — better luck next time` }).setTimestamp()],
+        });
+      }
+    }, 20_000);
+  }
+
+  // ── !russian ──────────────────────────────────────────────
+  else if (cmd === "russian") {
+    ensureUser(userId, userName);
+    const bet = parseInt(args[0]);
+    if (isNaN(bet) || bet <= 0) return msg.reply("Usage: `!russian <bet>`");
+    if (bet > 1500) return msg.reply("❌ Max Russian roulette bet is **1,500 🐱 kittens**!");
+
+    const existing = activeRussians.get(msg.channel.id);
+
+    if (existing && existing.phase === "joining") {
+      if (existing.players.has(userId)) return msg.reply("❌ You're already in this round!");
+      if (bet !== existing.betAmount) return msg.reply(`❌ This round's bet is **${existing.betAmount.toLocaleString()} 🐱**!`);
+      const bal = getKittens(userId);
+      if (bal < bet) return msg.reply(`❌ You only have **${bal.toLocaleString()} 🐱 kittens**!`);
+      removeKittens(userId, bet);
+      existing.players.set(userId, userName);
+      return msg.reply(`🔫 **${userName}** picks up the gun... (${existing.players.size} in the circle)`);
+    }
+
+    if (existing) return msg.reply("❌ A round is already loading in this channel!");
+
+    const bal = getKittens(userId);
+    if (bal < bet) return msg.reply(`❌ You only have **${bal.toLocaleString()} 🐱 kittens**!`);
+
+    removeKittens(userId, bet);
+    activeRussians.set(msg.channel.id, { phase: "joining", betAmount: bet, players: new Map([[userId, userName]]) });
+
+    await msg.channel.send({
+      embeds: [new EmbedBuilder()
+        .setTitle("🔫  Russian Roulette — Loading the Chamber")
+        .setDescription(
+          `**${userName}** spins the cylinder...\nBet: **${bet.toLocaleString()} 🐱 kittens**\n\n` +
+          `Type \`!russian ${bet}\` to join! Firing in **20 seconds**.\n\n` +
+          `*1 in 6 chance the gun fires on you. Survivors split the dead players' bets.*`
+        )
+        .setColor(0xe74c3c).setFooter({ text: "Do you feel lucky?" }).setTimestamp()],
+    });
+
+    setTimeout(async () => {
+      const r = activeRussians.get(msg.channel.id);
+      if (!r || r.phase !== "joining") return;
+      r.phase = "complete";
+      activeRussians.delete(msg.channel.id);
+
+      const dead = [], survived = [];
+      for (const [id, name] of r.players) {
+        (Math.random() < 1 / 6 ? dead : survived).push({ id, name });
+      }
+
+      const deadPool = dead.length * r.betAmount;
+      const lines = [
+        ...dead.map(({ name }) => `💀 **${name}** — *click* 💥 BANG — lost **${r.betAmount.toLocaleString()} 🐱**`),
+        ...survived.map(({ name }) => `😅 **${name}** — *click* ... safe`),
+      ];
+
+      if (dead.length === 0) {
+        for (const { id } of survived) addKittens(id, r.betAmount);
+        return msg.channel.send({
+          embeds: [new EmbedBuilder().setTitle("🔫  Russian Roulette — Everyone Survived!")
+            .setDescription(`${lines.join("\n")}\n\nThe cylinder was empty! Everyone gets their bet back.`)
+            .setColor(0x2ecc71).setTimestamp()],
+        });
+      }
+
+      if (survived.length === 0) {
+        return msg.channel.send({
+          embeds: [new EmbedBuilder().setTitle("🔫  Russian Roulette — EVERYONE DIED 💀")
+            .setDescription(`${lines.join("\n")}\n\n💀 The house takes **${deadPool.toLocaleString()} 🐱**. Nobody survives to collect.`)
+            .setColor(0x2f3136).setTimestamp()],
+        });
+      }
+
+      const share = Math.floor(deadPool / survived.length);
+      for (const { id } of survived) addKittens(id, r.betAmount + share);
+      await msg.channel.send({
+        embeds: [new EmbedBuilder().setTitle("🔫  Russian Roulette — Results")
+          .setDescription(
+            `${lines.join("\n")}\n\n` +
+            `💀 **${dead.length}** dead · 😅 **${survived.length}** survived\n` +
+            `Each survivor collects **+${share.toLocaleString()} 🐱** from the fallen!`
+          )
+          .setColor(0xe74c3c).setTimestamp()],
+      });
+    }, 20_000);
+  }
+
+  // ── !daily ────────────────────────────────────────────────
+  else if (cmd === "daily") {
+    ensureUser(userId, userName);
+    const today = todayStr();
+    const user = db.users[userId];
+
+    if (user.lastDailyDate === today) {
+      return msg.reply("❌ You already claimed your daily reward today! Come back tomorrow.");
+    }
+
+    user.lastDailyDate = today;
+    const reward = 150 + Math.floor(Math.random() * 101);
+    addKittens(userId, reward);
+    saveData(db);
+
+    await msg.reply({
+      embeds: [new EmbedBuilder()
+        .setTitle("📅  Daily Reward")
+        .setDescription(`**${userName}** claimed their daily!\n\n🐱 **+${reward.toLocaleString()} kittens** added to your balance.`)
+        .addFields({ name: "Balance", value: `${getKittens(userId).toLocaleString()} 🐱`, inline: true })
+        .setColor(0xf1c40f)
+        .setFooter({ text: "Come back tomorrow for another!" })
+        .setTimestamp()],
+    });
+  }
+
   else if (cmd === "cops") {
     const guild = msg.guild;
     await guild.members.fetch().catch(() => {});
@@ -2969,6 +3355,56 @@ client.on("interactionCreate", async (interaction) => {
     activeTrivias.delete(channelId);
     await revealTrivia(trivia);
   }
+});
+
+// ── Crash interactions ─────────────────────────────────────
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isButton()) return;
+  const { customId, user } = interaction;
+  if (!customId.startsWith("crash_cashout_")) return;
+
+  const channelId = customId.slice("crash_cashout_".length);
+  const game = activeCrashes.get(channelId);
+
+  if (!game || game.phase !== "flying") {
+    return interaction.reply({ content: "❌ The game has already ended!", ephemeral: true });
+  }
+  if (!game.bets.has(user.id)) {
+    return interaction.reply({ content: "❌ You're not in this crash game!", ephemeral: true });
+  }
+  const info = game.bets.get(user.id);
+  if (info.cashedAt !== null) {
+    return interaction.reply({ content: "❌ You already cashed out!", ephemeral: true });
+  }
+
+  info.cashedAt = game.multiplier;
+  const winnings = Math.floor(info.bet * game.multiplier);
+  addKittens(user.id, winnings);
+  const profit = winnings - info.bet;
+
+  await interaction.reply({
+    content: `💰 **${user.username}** cashed out at **${game.multiplier.toFixed(2)}x** — won **${winnings.toLocaleString()} 🐱** (+${profit.toLocaleString()} profit)!`,
+  });
+});
+
+// ── WYR interactions ───────────────────────────────────────
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isButton()) return;
+  const { customId, user } = interaction;
+  if (!customId.startsWith("wyr_a_") && !customId.startsWith("wyr_b_")) return;
+
+  const option = customId[4]; // "a" or "b"
+  const channelId = customId.slice(6);
+
+  const wyr = activeWyrs.get(channelId);
+  if (!wyr) return interaction.reply({ content: "❌ This poll has already ended!", ephemeral: true });
+  if (wyr.votes.a.has(user.id) || wyr.votes.b.has(user.id)) {
+    return interaction.reply({ content: "❌ You already voted!", ephemeral: true });
+  }
+
+  wyr.votes[option].add(user.id);
+  const total = wyr.votes.a.size + wyr.votes.b.size;
+  await interaction.reply({ content: `✅ Vote locked in! (${total} total so far)`, ephemeral: true });
 });
 
 // ── Ready ──────────────────────────────────────────────────
