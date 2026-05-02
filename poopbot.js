@@ -1162,6 +1162,53 @@ client.on("messageCreate", async (msg) => {
     }
   }
 
+  // ── !bomb ─────────────────────────────────────────────────
+  else if (cmd === "bomb") {
+    const target = msg.mentions.users.first();
+    if (!target) return msg.reply("❌ Usage: `!bomb @user`");
+    if (target.id === userId) return msg.reply("❌ You can't bomb yourself!");
+    if (target.bot) return msg.reply("❌ You can't bomb a bot!");
+
+    ensureUser(target.id, target.username);
+    const senderName = msg.guild?.members.cache.get(userId)?.displayName ?? userName;
+
+    const BOMB_AMOUNT = 100;
+    const HIT_CHANCE = 0.2;
+
+    const memberPool = msg.guild
+      ? [...msg.guild.members.cache.values()].filter(m => !m.user.bot)
+      : [];
+
+    const chain = [];
+    let current = target;
+
+    while (true) {
+      const currentName = msg.guild?.members.cache.get(current.id)?.displayName ?? current.username;
+      if (Math.random() < HIT_CHANCE) {
+        chain.push(`**${currentName}** 💥`);
+        ensureUser(current.id, current.username);
+        const before = getKittens(current.id);
+        removeKittens(current.id, BOMB_AMOUNT);
+        saveData(db);
+        const after = getKittens(current.id);
+        const lost = before - after;
+        const embed = new EmbedBuilder()
+          .setTitle("💣  BOOM!")
+          .setDescription(`**${senderName}** threw a bomb!\n\n${chain.join(" → ")}\n\n**${lost.toLocaleString()} 🐱 kittens** obliterated.`)
+          .addFields({ name: currentName, value: `${after.toLocaleString()} 🐱 remaining`, inline: true })
+          .setColor(0xe74c3c)
+          .setTimestamp();
+        await msg.channel.send({ embeds: [embed] });
+        break;
+      } else {
+        chain.push(`**${currentName}**`);
+        if (memberPool.length === 0) break;
+        current = memberPool[Math.floor(Math.random() * memberPool.length)].user;
+        ensureUser(current.id, current.username);
+      }
+    }
+  }
+
   // ── !blackjack ────────────────────────────────────────────
   else if (cmd === "blackjack" || cmd === "bj") {
     const channelId = msg.channel.id;
@@ -1589,6 +1636,7 @@ client.on("messageCreate", async (msg) => {
         { name: "`!donate @user <amount>`", value: "Donate kittens to another user" },
         { name: "`!rps <bet>` / `!rps @user <bet>`", value: "Play Rock Paper Scissors vs the house (win doubles your bet, tie refunds it) — or challenge someone 1v1 (winner takes the other's bet)" },
         { name: "`!rob [@user] <amount> [rps]`", value: "Rob a random user or target a specific one — dice roll (default) or rps · win 1.5× stake · 2 robs/day · 30s to respond" },
+        { name: "`!bomb @user`", value: "Throw a bomb at someone — 20% chance it goes off and obliterates 100 🐱 kittens · deflects to a random server member each miss until it hits" },
         { name: "`!beg`", value: "Beg the house for kittens — 40% chance of 1–200 🐱, 100% chance of humiliation" },
         { name: "`!jackpot` / `!megajackpot`", value: "Buy a jackpot ticket (**10 🐱**, 1 in 50) or mega jackpot ticket (**50 🐱**, 1 in 100) — winner takes the whole pot · `!jackpot info` / `!megajackpot info` to see current pots" },
         { name: "`!cops`", value: "Ping all server admins" },
