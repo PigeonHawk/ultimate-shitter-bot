@@ -258,6 +258,342 @@ const TRIVIA_QUESTIONS = [
     options: ["Asia", "South America", "Australia", "Africa"],
     answer: 3,
   },
+  // ── More Poop/Fart Biology ──
+  {
+    question: "At approximately what speed does gas exit the body during a fart?",
+    options: ["1 mph", "7 mph", "25 mph", "60 mph"],
+    answer: 1,
+  },
+  {
+    question: "Roughly what percentage of a fart is odorless nitrogen?",
+    options: ["20%", "40%", "59%", "80%"],
+    answer: 2,
+  },
+  {
+    question: "Can farts actually be lit on fire?",
+    options: ["No, they contain no flammable gases", "Yes, due to methane and hydrogen content", "Only if you've eaten nothing but beans", "Only at impossibly high concentrations"],
+    answer: 1,
+  },
+  {
+    question: "What is 'meconium'?",
+    options: ["A digestive enzyme", "A type of laxative", "A newborn's first poop", "The medical term for diarrhea"],
+    answer: 2,
+  },
+  {
+    question: "What is borborygmus?",
+    options: ["The medical term for farting", "The gurgling/rumbling sound your stomach makes", "A chronic bowel disease", "The process of digestion"],
+    answer: 1,
+  },
+  {
+    question: "How long does it typically take food to travel through your entire digestive system?",
+    options: ["2–6 hours", "6–12 hours", "24–72 hours", "About 1 week"],
+    answer: 2,
+  },
+  {
+    question: "How long is the average adult's large intestine?",
+    options: ["About 2 feet", "About 5 feet", "About 10 feet", "About 15 feet"],
+    answer: 1,
+  },
+  {
+    question: "What does IBS stand for?",
+    options: ["Internal Bowel Syndrome", "Irritable Bowel Syndrome", "Intestinal Bacteria Syndrome", "Irregular Bowel Spasm"],
+    answer: 1,
+  },
+  {
+    question: "Why does corn often appear in your poop looking completely intact?",
+    options: ["Corn bypasses the intestines entirely", "The outer shell (pericarp) resists human digestion", "Corn is fully indigestible", "The stomach rejects it immediately"],
+    answer: 1,
+  },
+  {
+    question: "Which poop color is considered a medical emergency?",
+    options: ["Green", "Yellow", "Black or bright red", "Dark brown"],
+    answer: 2,
+  },
+  {
+    question: "What is coprophobia?",
+    options: ["Love of bathroom humor", "Fear of spiders", "Fear of feces", "Fear of enclosed spaces"],
+    answer: 2,
+  },
+  {
+    question: "What is the main function of the colon?",
+    options: ["Digest protein", "Produce stomach acid", "Absorb water and form stool", "Filter toxins from blood"],
+    answer: 2,
+  },
+  {
+    question: "What makes poop float?",
+    options: ["Too much water content", "Excess gas trapped in the stool", "A diet too high in protein", "Severe liver disease only"],
+    answer: 1,
+  },
+  {
+    question: "The smell of poop is primarily caused by which compounds?",
+    options: ["Methane and carbon dioxide", "Skatole and indole", "Bile and digestive enzymes", "Nitrogen and ammonia"],
+    answer: 1,
+  },
+  {
+    question: "Approximately what percentage of dry stool weight is made up of bacteria?",
+    options: ["About 5%", "About 15%", "About 30%", "About 60%"],
+    answer: 2,
+  },
+  {
+    question: "What is the anal sphincter?",
+    options: ["A digestive enzyme", "The muscle that controls when you poop", "A type of gut bacterium", "The tube connecting stomach to small intestine"],
+    answer: 1,
+  },
+  // ── Animal Poop Facts ──
+  {
+    question: "How much poop does an elephant produce per day?",
+    options: ["About 50 pounds", "About 100 pounds", "About 300 pounds", "About 600 pounds"],
+    answer: 2,
+  },
+  {
+    question: "What is 'guano'?",
+    options: ["A tropical bird feather type", "Bat or bird droppings used as fertilizer", "A South American fruit", "A digestive enzyme"],
+    answer: 1,
+  },
+  {
+    question: "Which animal must eat some of its own droppings (called cecotropes) to absorb essential nutrients?",
+    options: ["Dogs", "Rabbits", "Hamsters", "Horses"],
+    answer: 1,
+  },
+  {
+    question: "What do dung beetles do with animal poop?",
+    options: ["Eat it and build homes from it", "Use it as camouflage", "Roll it into balls, eat it, and lay eggs in it", "Bury it to decompose underground"],
+    answer: 2,
+  },
+  {
+    question: "What color is penguin poop, owing to their krill-heavy diet?",
+    options: ["Brown", "White", "Pink to salmon", "Green"],
+    answer: 2,
+  },
+  {
+    question: "What do hippos do while defecating that helps spread their scent and mark territory?",
+    options: ["Roll in the mud afterward", "Spin their tail to fling dung in all directions", "Bellow loudly", "Stomp their feet"],
+    answer: 1,
+  },
+  {
+    question: "Why is whale poop surprisingly important to ocean ecosystems?",
+    options: ["It sinks and feeds deep-sea creatures", "It floats and fertilizes phytoplankton, supporting food chains", "It balances ocean pH levels", "It has no significant ecological role"],
+    answer: 1,
+  },
+  {
+    question: "Which animal produces the most methane through flatulence, making them a significant greenhouse gas contributor?",
+    options: ["Pigs", "Horses", "Cows", "Sheep"],
+    answer: 2,
+  },
+  // ── Bathroom History & Culture ──
+  {
+    question: "What did ancient Romans use to wipe themselves after using the toilet?",
+    options: ["Papyrus leaves", "Corn cobs", "A sponge on a stick called a tersorium", "Early toilet paper"],
+    answer: 2,
+  },
+  {
+    question: "In which country are toilets often equipped with heated seats, built-in bidets, and sound maskers as standard features?",
+    options: ["Germany", "Sweden", "Japan", "South Korea"],
+    answer: 2,
+  },
+  {
+    question: "What is the Toto brand famous for producing?",
+    options: ["Luxury automobiles", "High-tech toilets and bidets", "Designer bathroom tiles", "Plumbing pipes"],
+    answer: 1,
+  },
+  {
+    question: "What was the 'Great Stink' of London in 1858?",
+    options: ["A volcanic eruption in Scotland", "The overwhelming stench of the sewage-filled River Thames in summer heat", "A mass skunk invasion of Hyde Park", "A catastrophic gas main explosion"],
+    answer: 1,
+  },
+  {
+    question: "Which U.S. president was known for holding meetings and conversations while sitting on the toilet?",
+    options: ["Abraham Lincoln", "Lyndon B. Johnson", "Franklin D. Roosevelt", "Theodore Roosevelt"],
+    answer: 1,
+  },
+  {
+    question: "The United Nations designated November 19th as what global observance?",
+    options: ["World Plumbing Day", "World Sanitation Day", "World Toilet Day", "World Hygiene Day"],
+    answer: 2,
+  },
+  {
+    question: "What children's book by Taro Gomi teaches kids that every living creature poops?",
+    options: ["'Poop Patrol'", "'The Big Brown Book'", "'Everyone Poops'", "'Where Does Poop Go?'"],
+    answer: 2,
+  },
+  {
+    question: "What did ancient Spartans use as 'toilet paper'?",
+    options: ["Leaves", "Wool scraps", "Ceramic shards called pessoi", "Sand"],
+    answer: 2,
+  },
+  {
+    question: "What was a 'gong farmer' in medieval England?",
+    options: ["A farmer who grew a grain called gong", "A person paid to clean out cesspits and privies", "A royal court musician", "A medieval tax collector"],
+    answer: 1,
+  },
+  {
+    question: "Who patented the S-bend (U-bend) in plumbing that keeps sewer gases out of your home?",
+    options: ["Thomas Crapper", "Alexander Cumming", "John Harington", "Joseph Bramah"],
+    answer: 1,
+  },
+  {
+    question: "What is a 'coprolite'?",
+    options: ["A toilet cleaning product", "Fossilized animal poop", "A poop-shaped geological formation", "A scientist who studies sewage"],
+    answer: 1,
+  },
+  // ── Fun Poop/Fart Facts ──
+  {
+    question: "What is the official Unicode name of the 💩 emoji?",
+    options: ["Smiling Poo", "Happy Feces", "Pile of Poo", "Turd Emoji"],
+    answer: 2,
+  },
+  {
+    question: "What is the scientific study of feces called?",
+    options: ["Coprology", "Urology", "Scatology", "Fecalogy"],
+    answer: 2,
+  },
+  {
+    question: "What gas makes up the LARGEST percentage of a typical fart?",
+    options: ["Methane", "Carbon dioxide", "Nitrogen", "Hydrogen sulfide"],
+    answer: 2,
+  },
+  {
+    question: "What is the medical term for a burp?",
+    options: ["Flatulence", "Eructation", "Borborygmus", "Peristalsis"],
+    answer: 1,
+  },
+  {
+    question: "What happens to human waste on the International Space Station?",
+    options: ["Vacuum toilets suck waste into sealed containers", "It is vented directly into space", "Astronauts exclusively wear diapers", "Waste is stored in airlocks"],
+    answer: 0,
+  },
+  {
+    question: "What is 'night soil,' historically speaking?",
+    options: ["Soil that only grows plants at night", "Human feces collected from privies and used as crop fertilizer", "A medieval bedtime herbal remedy", "Dark volcanic soil"],
+    answer: 1,
+  },
+  // ── More Math (poop-flavored) ──
+  {
+    question: "A cow produces about 65 lbs of poop per day. How many pounds of poop does it produce in a year?",
+    options: ["18,980 lbs", "23,725 lbs", "15,330 lbs", "30,000 lbs"],
+    answer: 1,
+  },
+  {
+    question: "If you spend 8 minutes on the toilet per day, how many full days per year are you sitting on the throne?",
+    options: ["About 1.5 days", "About 2 days", "About 3.5 days", "About 5 days"],
+    answer: 1,
+  },
+  {
+    question: "If you fart 15 times a day for 3 seconds each, how many total seconds per day do you spend farting?",
+    options: ["30 seconds", "45 seconds", "60 seconds", "90 seconds"],
+    answer: 1,
+  },
+  {
+    question: "If the U.S. population (330 million people) each produces 1 lb of poop per day, how many tons is that total per day?",
+    options: ["About 80,000 tons", "About 165,000 tons", "About 330,000 tons", "About 500,000 tons"],
+    answer: 1,
+  },
+  {
+    question: "A standard roll of toilet paper has ~200 sheets. Using 8 sheets per poop and pooping twice a day, how many rolls do you use per year?",
+    options: ["About 15 rolls", "About 21 rolls", "About 29 rolls", "About 50 rolls"],
+    answer: 2,
+  },
+  // ── General Trivia ──
+  {
+    question: "What is the smallest planet in our solar system?",
+    options: ["Mars", "Pluto", "Mercury", "Venus"],
+    answer: 2,
+  },
+  {
+    question: "How many teeth does a healthy adult human have?",
+    options: ["28", "30", "32", "36"],
+    answer: 2,
+  },
+  {
+    question: "What is the most spoken language in the world by number of native speakers?",
+    options: ["English", "Spanish", "Hindi", "Mandarin Chinese"],
+    answer: 3,
+  },
+  {
+    question: "How many strings does a standard guitar have?",
+    options: ["4", "5", "6", "8"],
+    answer: 2,
+  },
+  {
+    question: "What is the chemical symbol for gold?",
+    options: ["Go", "Gd", "Au", "Ag"],
+    answer: 2,
+  },
+  {
+    question: "How many sides does a hexagon have?",
+    options: ["5", "6", "7", "8"],
+    answer: 1,
+  },
+  {
+    question: "What is the longest river in the world?",
+    options: ["Amazon", "Mississippi", "Yangtze", "Nile"],
+    answer: 3,
+  },
+  {
+    question: "Which element has the atomic number 1?",
+    options: ["Helium", "Hydrogen", "Lithium", "Oxygen"],
+    answer: 1,
+  },
+  {
+    question: "How many players are on a standard soccer team on the field at one time?",
+    options: ["9", "10", "11", "12"],
+    answer: 2,
+  },
+  {
+    question: "What is the hardest natural substance on Earth?",
+    options: ["Quartz", "Corundum", "Topaz", "Diamond"],
+    answer: 3,
+  },
+  {
+    question: "What year did World War II end?",
+    options: ["1943", "1944", "1945", "1946"],
+    answer: 2,
+  },
+  {
+    question: "Who painted the Mona Lisa?",
+    options: ["Michelangelo", "Raphael", "Leonardo da Vinci", "Donatello"],
+    answer: 2,
+  },
+  {
+    question: "How many planets are in our solar system?",
+    options: ["7", "8", "9", "10"],
+    answer: 1,
+  },
+  {
+    question: "What is the currency of Japan?",
+    options: ["Won", "Yuan", "Yen", "Ringgit"],
+    answer: 2,
+  },
+  {
+    question: "What is the tallest mountain in the world?",
+    options: ["K2", "Kangchenjunga", "Mount Kilimanjaro", "Mount Everest"],
+    answer: 3,
+  },
+  {
+    question: "What is 15% of 200?",
+    options: ["25", "30", "35", "40"],
+    answer: 1,
+  },
+  {
+    question: "Which country has the most natural lakes in the world?",
+    options: ["Russia", "USA", "Finland", "Canada"],
+    answer: 3,
+  },
+  {
+    question: "What does 'www' stand for in a web address?",
+    options: ["World Wide Web", "World Web Works", "Wide World Web", "Web World Wide"],
+    answer: 0,
+  },
+  {
+    question: "Which gas makes up the majority of Earth's atmosphere?",
+    options: ["Oxygen", "Nitrogen", "Carbon dioxide", "Argon"],
+    answer: 1,
+  },
+  {
+    question: "How many zeros are in one billion?",
+    options: ["6", "7", "8", "9"],
+    answer: 3,
+  },
 ];
 
 // ── Persistence ────────────────────────────────────────────
