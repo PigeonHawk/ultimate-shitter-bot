@@ -386,6 +386,7 @@ function buildLeaderboardEmbed(data, guildMembers) {
 const pendingRobs = new Map();
 const ROB_DAILY_LIMIT = 2;
 const JACKPOT_DAILY_LIMIT = 5;
+const TRIVIA_HOURLY_LIMIT = 5;
 const ROB_RPS_TIMEOUT_MS = 30_000;
 
 // ── Blackjack helpers ──────────────────────────────────────
@@ -1762,7 +1763,22 @@ client.on("messageCreate", async (msg) => {
     if (userKittens < bet) return msg.reply(`❌ You only have **${userKittens.toLocaleString()} 🐱 kittens**!`);
     if (activeTrivias.has(msg.channel.id)) return msg.reply("❌ A trivia question is already active in this channel!");
 
+    const TRIVIA_WINDOW_MS = 60 * 60 * 1000;
+    const triviaWindowStart = db.users[userId]?.lastTriviaWindowStart ?? 0;
+    const triviasThisHour = (Date.now() - triviaWindowStart < TRIVIA_WINDOW_MS) ? (db.users[userId]?.triviasThisHour ?? 0) : 0;
+    if (triviasThisHour >= TRIVIA_HOURLY_LIMIT) {
+      const secsLeft = Math.ceil((TRIVIA_WINDOW_MS - (Date.now() - triviaWindowStart)) / 1000);
+      const minsLeft = Math.ceil(secsLeft / 60);
+      return msg.reply(`❌ You've started too many trivia games! Try again in **${minsLeft} minute${minsLeft !== 1 ? "s" : ""}**.`);
+    }
+
     ensureUser(userId, userName);
+    if (Date.now() - (db.users[userId].lastTriviaWindowStart ?? 0) >= TRIVIA_WINDOW_MS) {
+      db.users[userId].lastTriviaWindowStart = Date.now();
+      db.users[userId].triviasThisHour = 0;
+    }
+    db.users[userId].triviasThisHour = (db.users[userId].triviasThisHour ?? 0) + 1;
+    saveData(db);
     removeKittens(userId, bet);
 
     const channelId = msg.channel.id;
