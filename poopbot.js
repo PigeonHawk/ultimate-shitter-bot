@@ -1169,7 +1169,18 @@ client.on("messageCreate", async (msg) => {
     if (target.id === userId) return msg.reply("❌ You can't bomb yourself!");
     if (target.bot) return msg.reply("❌ You can't bomb a bot!");
 
+    const BOMB_COOLDOWN_MS = 60 * 60 * 1000;
+    const lastBomb = db.users[userId]?.lastBombTime ?? 0;
+    const elapsed = Date.now() - lastBomb;
+    if (elapsed < BOMB_COOLDOWN_MS) {
+      const secsLeft = Math.ceil((BOMB_COOLDOWN_MS - elapsed) / 1000);
+      const minsLeft = Math.ceil(secsLeft / 60);
+      return msg.reply(`❌ You already threw a bomb! You can throw another in **${minsLeft} minute${minsLeft !== 1 ? "s" : ""}**.`);
+    }
+
     ensureUser(target.id, target.username);
+    db.users[userId].lastBombTime = Date.now();
+    saveData(db);
     const senderName = msg.guild?.members.cache.get(userId)?.displayName ?? userName;
 
     const BOMB_AMOUNT = 100;
