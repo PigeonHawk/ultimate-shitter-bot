@@ -1592,6 +1592,7 @@ client.on("messageCreate", async (msg) => {
         { name: "`!rps <bet>` / `!rps @user <bet>`", value: "Play Rock Paper Scissors vs the house (win doubles your bet, tie refunds it) — or challenge someone 1v1 (winner takes the other's bet)" },
         { name: "`!rob [@user] <amount> [rps]`", value: "Rob a random user or target a specific one — dice roll (default) or rps · win 1.5× stake · 2 robs/day · 30s to respond" },
         { name: "`!beg`", value: "Beg the house for kittens — 40% chance of 1–200 🐱, 100% chance of humiliation" },
+        { name: "`!jackpot` / `!megajackpot`", value: "Buy a jackpot ticket (**10 🐱**, 1 in 50) or mega jackpot ticket (**50 🐱**, 1 in 100) — winner takes the whole pot · `!jackpot info` / `!megajackpot info` to see current pots" },
         { name: "`!cops`", value: "Ping all server admins" },
         { name: "`!report @user`", value: "Report a user for spam — 2 reports triggers a 300 🐱 penalty + 2 min freeze" },
         { name: "⚡ Quick pooper bonus", value: "Poop within 2 hours of your last for +1.5 points!" },
@@ -1763,6 +1764,144 @@ client.on("messageCreate", async (msg) => {
         await revealTrivia(current);
       }, 30_000);
     }, 20_000);
+  }
+
+  // ── !jackpot ────────────────────────────────────────────────
+  else if (cmd === "jackpot") {
+    ensureUser(userId, userName);
+    if (!db.jackpot) db.jackpot = { pot: 0, ticketCount: 0, prize: null };
+
+    const sub = args[0]?.toLowerCase();
+
+    if (sub === "setprize") {
+      if (!msg.member?.permissions.has("Administrator")) return msg.reply("❌ Admins only.");
+      const prize = args.slice(1).join(" ");
+      if (!prize) return msg.reply("Usage: `!jackpot setprize <code>`");
+      db.jackpot.prize = prize;
+      saveData(db);
+      return msg.reply("✅ Jackpot prize set!");
+    }
+
+    if (sub === "info" || sub === undefined) {
+      if (sub === "info" || getKittens(userId) < 10) {
+        const embed = new EmbedBuilder()
+          .setTitle("🎟️  Jackpot — Current Pot")
+          .setDescription(`**${(db.jackpot.pot).toLocaleString()} 🐱 kittens** in the pot\n**${db.jackpot.ticketCount.toLocaleString()}** tickets sold so far\n\nCost: **10 🐱** per ticket · Odds: **1 in 50** (2%)`)
+          .setColor(0xf1c40f)
+          .setFooter({ text: "Use !jackpot to buy a ticket!" });
+        return msg.channel.send({ embeds: [embed] });
+      }
+    }
+
+    if (sub !== undefined && sub !== "info") return msg.reply("Usage: `!jackpot` to buy a ticket · `!jackpot info` to see the pot");
+
+    const TICKET_COST = 10;
+    const userKittens = getKittens(userId);
+    if (userKittens < TICKET_COST) return msg.reply(`❌ You need **${TICKET_COST} 🐱 kittens** for a ticket — you only have **${userKittens.toLocaleString()} 🐱**.`);
+
+    removeKittens(userId, TICKET_COST);
+    db.jackpot.pot += TICKET_COST;
+    db.jackpot.ticketCount += 1;
+    saveData(db);
+
+    if (Math.random() < 1 / 50) {
+      const prize = db.jackpot.prize;
+      const pot = db.jackpot.pot;
+      addKittens(userId, pot);
+      db.jackpot.pot = 0;
+      db.jackpot.prize = null;
+      saveData(db);
+
+      let desc = `🏆 **${userName}** bought a ticket and **WON THE JACKPOT!!!**\n\n💰 **${pot.toLocaleString()} 🐱 kittens** added to your balance!`;
+      if (prize) desc += `\n\n🎁 **Prize:** \`${prize}\``;
+      desc += "\n\nThe pot has been reset.";
+
+      const embed = new EmbedBuilder()
+        .setTitle("🎟️  JACKPOT WON!!! 🎉🎉🎉")
+        .setDescription(desc)
+        .setColor(0xf1c40f)
+        .addFields({ name: userName, value: `${getKittens(userId).toLocaleString()} 🐱`, inline: true })
+        .setTimestamp();
+      await msg.channel.send({ embeds: [embed] });
+    } else {
+      const embed = new EmbedBuilder()
+        .setTitle("🎟️  No luck this time...")
+        .setDescription(`<@${userId}> bought a ticket — nothing this time.\n\n🏦 **Pot: ${db.jackpot.pot.toLocaleString()} 🐱** · Tickets sold: **${db.jackpot.ticketCount.toLocaleString()}**`)
+        .setColor(0x95a5a6)
+        .addFields({ name: userName, value: `${getKittens(userId).toLocaleString()} 🐱`, inline: true })
+        .setFooter({ text: "1 in 50 chance to win · !jackpot to try again" })
+        .setTimestamp();
+      await msg.channel.send({ embeds: [embed] });
+    }
+  }
+
+  // ── !megajackpot ────────────────────────────────────────────
+  else if (cmd === "megajackpot") {
+    ensureUser(userId, userName);
+    if (!db.megaJackpot) db.megaJackpot = { pot: 0, ticketCount: 0, prize: null };
+
+    const sub = args[0]?.toLowerCase();
+
+    if (sub === "setprize") {
+      if (!msg.member?.permissions.has("Administrator")) return msg.reply("❌ Admins only.");
+      const prize = args.slice(1).join(" ");
+      if (!prize) return msg.reply("Usage: `!megajackpot setprize <code>`");
+      db.megaJackpot.prize = prize;
+      saveData(db);
+      return msg.reply("✅ Mega Jackpot prize set!");
+    }
+
+    if (sub === "info" || sub === undefined) {
+      if (sub === "info" || getKittens(userId) < 50) {
+        const embed = new EmbedBuilder()
+          .setTitle("💎  Mega Jackpot — Current Pot")
+          .setDescription(`**${(db.megaJackpot.pot).toLocaleString()} 🐱 kittens** in the mega pot\n**${db.megaJackpot.ticketCount.toLocaleString()}** tickets sold so far\n\nCost: **50 🐱** per ticket · Odds: **1 in 100** (1%)`)
+          .setColor(0x9b59b6)
+          .setFooter({ text: "Use !megajackpot to buy a ticket!" });
+        return msg.channel.send({ embeds: [embed] });
+      }
+    }
+
+    if (sub !== undefined && sub !== "info") return msg.reply("Usage: `!megajackpot` to buy a ticket · `!megajackpot info` to see the pot");
+
+    const TICKET_COST = 50;
+    const userKittens = getKittens(userId);
+    if (userKittens < TICKET_COST) return msg.reply(`❌ You need **${TICKET_COST} 🐱 kittens** for a mega ticket — you only have **${userKittens.toLocaleString()} 🐱**.`);
+
+    removeKittens(userId, TICKET_COST);
+    db.megaJackpot.pot += TICKET_COST;
+    db.megaJackpot.ticketCount += 1;
+    saveData(db);
+
+    if (Math.random() < 1 / 100) {
+      const prize = db.megaJackpot.prize;
+      const pot = db.megaJackpot.pot;
+      addKittens(userId, pot);
+      db.megaJackpot.pot = 0;
+      db.megaJackpot.prize = null;
+      saveData(db);
+
+      let desc = `💎 **${userName}** bought a mega ticket and **WON THE MEGA JACKPOT!!!**\n\n💰 **${pot.toLocaleString()} 🐱 kittens** added to your balance!`;
+      if (prize) desc += `\n\n🎁 **Prize:** \`${prize}\``;
+      desc += "\n\nThe mega pot has been reset.";
+
+      const embed = new EmbedBuilder()
+        .setTitle("💎  MEGA JACKPOT WON!!! 🔥🔥🔥")
+        .setDescription(desc)
+        .setColor(0x9b59b6)
+        .addFields({ name: userName, value: `${getKittens(userId).toLocaleString()} 🐱`, inline: true })
+        .setTimestamp();
+      await msg.channel.send({ embeds: [embed] });
+    } else {
+      const embed = new EmbedBuilder()
+        .setTitle("💎  No luck this time...")
+        .setDescription(`<@${userId}> bought a mega ticket — nothing this time.\n\n🏦 **Mega pot: ${db.megaJackpot.pot.toLocaleString()} 🐱** · Tickets sold: **${db.megaJackpot.ticketCount.toLocaleString()}**`)
+        .setColor(0x95a5a6)
+        .addFields({ name: userName, value: `${getKittens(userId).toLocaleString()} 🐱`, inline: true })
+        .setFooter({ text: "1 in 100 chance to win · !megajackpot to try again" })
+        .setTimestamp();
+      await msg.channel.send({ embeds: [embed] });
+    }
   }
 
   else if (cmd === "cops") {
