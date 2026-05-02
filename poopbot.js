@@ -24,6 +24,7 @@ const DATA_FILE = process.env.RAILWAY_VOLUME_MOUNT_PATH
   ? `${process.env.RAILWAY_VOLUME_MOUNT_PATH}/poopdata.json`
   : "./poopdata.json";
 const CHAMPION_ROLE_NAME = "The Ultimate Shitter";
+const FART_CHAMPION_ROLE_NAME = "The Ultimate Farter";
 const KITTENS_PER_MESSAGE = 5;
 const KITTENS_PER_VC_MINUTE = 5;
 const ADMIN_PASSWORD = "p00p5";
@@ -286,6 +287,12 @@ function ensureUser(userId, name) {
       allTimePoints: 0,
       weeklyWins: 0,
       kittens: 0,
+      fartPoints: 0,
+      fartCount: 0,
+      lastFartTime: null,
+      allTimeFartCount: 0,
+      allTimeFartPoints: 0,
+      fartWeeklyWins: 0,
     };
   }
   if (name) db.users[userId].name = name;
@@ -331,6 +338,22 @@ function nextDoubleWindowDescription() {
 }
 
 // ── Champion role ──────────────────────────────────────────
+async function assignFartChampionRole(guild, winnerId) {
+  const role = guild.roles.cache.find((r) => r.name === FART_CHAMPION_ROLE_NAME);
+  if (!role) {
+    console.warn(`[UltimateShitter] Role "${FART_CHAMPION_ROLE_NAME}" not found in ${guild.name}.`);
+    return false;
+  }
+  if (db.fartChampionId && db.fartChampionId !== winnerId) {
+    const oldChamp = await guild.members.fetch(db.fartChampionId).catch(() => null);
+    if (oldChamp) await oldChamp.roles.remove(role).catch(() => {});
+  }
+  const newChamp = await guild.members.fetch(winnerId).catch(() => null);
+  if (!newChamp) return false;
+  await newChamp.roles.add(role).catch(() => {});
+  return newChamp;
+}
+
 async function assignChampionRole(guild, winnerId) {
   const role = guild.roles.cache.find((r) => r.name === CHAMPION_ROLE_NAME);
   if (!role) {
@@ -362,6 +385,12 @@ function getTopUser() {
   return { id: sorted[0][0], ...sorted[0][1] };
 }
 
+function getFartTopUser() {
+  const sorted = Object.entries(db.users).sort(([, a], [, b]) => (b.fartPoints ?? 0) - (a.fartPoints ?? 0));
+  if (!sorted.length || (sorted[0][1].fartPoints ?? 0) === 0) return null;
+  return { id: sorted[0][0], ...sorted[0][1] };
+}
+
 function buildLeaderboardEmbed(data, guildMembers) {
   const sorted = Object.entries(data.users)
     .sort(([, a], [, b]) => b.points - a.points || b.count - a.count)
@@ -378,6 +407,27 @@ function buildLeaderboardEmbed(data, guildMembers) {
     .setTitle("💩  Weekly Poop Leaderboard")
     .setDescription(rows.length ? rows.join("\n") : "*No poops logged yet!*")
     .setColor(0x8b4513)
+    .setFooter({ text: `Week ${weekNum} • Resets every Monday at midnight` })
+    .setTimestamp();
+}
+
+function buildFartLeaderboardEmbed(data, guildMembers) {
+  const sorted = Object.entries(data.users)
+    .filter(([, u]) => (u.fartPoints ?? 0) > 0 || (u.fartCount ?? 0) > 0)
+    .sort(([, a], [, b]) => (b.fartPoints ?? 0) - (a.fartPoints ?? 0) || (b.fartCount ?? 0) - (a.fartCount ?? 0))
+    .slice(0, 10);
+  const medals = ["🥇", "🥈", "🥉"];
+  const rows = sorted.map(([id, info], i) => {
+    const member = guildMembers?.get(id);
+    const name = member?.displayName ?? info.name ?? `User ${id}`;
+    const medal = medals[i] ?? `**${i + 1}.**`;
+    return `${medal} **${name}** — ${info.fartPoints ?? 0} 💨 (${info.fartCount ?? 0} farts)`;
+  });
+  const weekNum = getWeekNumber(data.weekStart);
+  return new EmbedBuilder()
+    .setTitle("💨  Weekly Fart Leaderboard")
+    .setDescription(rows.length ? rows.join("\n") : "*No farts logged yet!*")
+    .setColor(0xf5d76e)
     .setFooter({ text: `Week ${weekNum} • Resets every Monday at midnight` })
     .setTimestamp();
 }
@@ -710,10 +760,12 @@ cron.schedule("0 0 * * 1", () => {
   client.guilds.cache.forEach(async (guild) => {
     await guild.members.fetch().catch(() => {});
     const channel = guild.channels.cache.find((c) => c.name === "poop-leaderboard" || c.name === "general");
+
+    // Poop champion
     const winner = getTopUser();
     if (channel) {
       const embed = buildLeaderboardEmbed(db, guild.members.cache);
-      await channel.send({ content: "📣 **Weekly results before the reset!**", embeds: [embed] }).catch(() => {});
+      await channel.send({ content: "📣 **Weekly poop results before the reset!**", embeds: [embed] }).catch(() => {});
     }
     if (winner) {
       const crowned = await assignChampionRole(guild, winner.id);
@@ -730,11 +782,37 @@ cron.schedule("0 0 * * 1", () => {
       }
       db.championId = null;
     }
+
+    // Fart champion
+    const fartWinner = getFartTopUser();
+    const fartChannel = guild.channels.cache.find((c) => c.name === "fart-leaderboard") ?? channel;
+    if (fartChannel) {
+      const fartEmbed = buildFartLeaderboardEmbed(db, guild.members.cache);
+      await fartChannel.send({ content: "💨 **Weekly fart results before the reset!**", embeds: [fartEmbed] }).catch(() => {});
+    }
+    if (fartWinner) {
+      const fartCrowned = await assignFartChampionRole(guild, fartWinner.id);
+      db.fartChampionId = fartWinner.id;
+      db.users[fartWinner.id].fartWeeklyWins = (db.users[fartWinner.id].fartWeeklyWins ?? 0) + 1;
+      if (fartCrowned && fartChannel) {
+        await fartChannel.send(`💨 **${fartCrowned.displayName}** is the new **Ultimate Farter**! 💨`).catch(() => {});
+      }
+    } else if (db.fartChampionId) {
+      const role = guild.roles.cache.find((r) => r.name === FART_CHAMPION_ROLE_NAME);
+      if (role) {
+        const oldChamp = await guild.members.fetch(db.fartChampionId).catch(() => null);
+        if (oldChamp) await oldChamp.roles.remove(role).catch(() => {});
+      }
+      db.fartChampionId = null;
+    }
   });
   Object.keys(db.users).forEach((id) => {
     db.users[id].points = 0;
     db.users[id].count = 0;
     db.users[id].lastPoopTime = null;
+    db.users[id].fartPoints = 0;
+    db.users[id].fartCount = 0;
+    db.users[id].lastFartTime = null;
   });
   db.weekStart = todayStr();
   saveData(db);
@@ -948,6 +1026,143 @@ client.on("messageCreate", async (msg) => {
       .setDescription(fact)
       .setColor(0x8b4513)
       .setFooter({ text: "Use !poopfacts again for another one" });
+    await msg.channel.send({ embeds: [embed] });
+  }
+
+  // ── !fart ────────────────────────────────────────────────
+  else if (cmd === "fart") {
+    ensureUser(userId, userName);
+    const double = isDoublePointsNow();
+    const earned = double ? 2 : 1;
+    const now = Date.now();
+    const lastFart = db.users[userId].lastFartTime;
+    const ONE_HOUR = 60 * 60 * 1000;
+    const quickBonus = lastFart && (now - lastFart) <= ONE_HOUR ? 1.5 : 0;
+    const totalEarned = earned + quickBonus;
+    db.users[userId].fartPoints = (db.users[userId].fartPoints ?? 0) + totalEarned;
+    db.users[userId].fartCount = (db.users[userId].fartCount ?? 0) + 1;
+    db.users[userId].lastFartTime = now;
+    db.users[userId].allTimeFartCount = (db.users[userId].allTimeFartCount ?? 0) + 1;
+    db.users[userId].allTimeFartPoints = (db.users[userId].allTimeFartPoints ?? 0) + totalEarned;
+    saveData(db);
+    const total = db.users[userId].fartPoints;
+    const bonusText = double ? " 🔥 **DOUBLE POINTS!** 🔥" : "";
+    const quickText = quickBonus ? "\n⚡ **Quick Farter bonus!** +1.5 pts for farting within 1 hour!" : "";
+    const fartLeader = getFartTopUser();
+    const leadText = fartLeader?.id === userId ? "\n👑 You're currently leading the fart charts!" : "";
+    const fartSounds = ["*pffft*", "*braaap*", "*toot*", "*squeak*", "*riiiip*", "*pfft*", "*blaaaart*", "*peep*", "*BRRRT*"];
+    const sound = fartSounds[Math.floor(Math.random() * fartSounds.length)];
+    await msg.reply(`💨 ${sound} Logged! You earned **${totalEarned} point${totalEarned !== 1 ? "s" : ""}**!${bonusText}${quickText}\nYour total this week: **${total} 💨**${leadText}`);
+  }
+
+  // ── !fartleaderboard ──────────────────────────────────────
+  else if (cmd === "fartleaderboard" || cmd === "fartlb" || cmd === "flb") {
+    await msg.guild?.members.fetch().catch(() => {});
+    const embed = buildFartLeaderboardEmbed(db, msg.guild?.members.cache);
+    let champText = "";
+    if (db.fartChampionId) {
+      const champ = await msg.guild?.members.fetch(db.fartChampionId).catch(() => null);
+      if (champ) champText = `👑 Reigning **Ultimate Farter**: **${champ.displayName}** *(last week's champ)*`;
+    }
+    await msg.channel.send({ content: champText || undefined, embeds: [embed] });
+  }
+
+  // ── !fartalltime ──────────────────────────────────────────
+  else if (cmd === "fartalltime" || cmd === "fat") {
+    await msg.guild?.members.fetch().catch(() => {});
+    const sorted = Object.entries(db.users)
+      .filter(([, u]) => (u.allTimeFartCount ?? 0) > 0)
+      .sort(([, a], [, b]) => (b.allTimeFartCount ?? 0) - (a.allTimeFartCount ?? 0))
+      .slice(0, 10);
+    const medals = ["🥇", "🥈", "🥉"];
+    const rows = sorted.map(([id, info], i) => {
+      const member = msg.guild?.members.cache.get(id);
+      const name = member?.displayName ?? info.name ?? `User ${id}`;
+      const medal = medals[i] ?? `**${i + 1}.**`;
+      return `${medal} **${name}** — ${(info.allTimeFartCount ?? 0).toLocaleString()} 💨 · ${Math.round(info.allTimeFartPoints ?? 0).toLocaleString()} pts · 👑 ${info.fartWeeklyWins ?? 0} wins`;
+    });
+    const embed = new EmbedBuilder()
+      .setTitle("💨  All-Time Fart Hall of Fame")
+      .setDescription(rows.length ? rows.join("\n") : "*Nobody has farted yet!*")
+      .setColor(0xf5d76e)
+      .setFooter({ text: "All-time stats never reset" })
+      .setTimestamp();
+    await msg.channel.send({ embeds: [embed] });
+  }
+
+  // ── !fartstats ────────────────────────────────────────────
+  else if (cmd === "fartstats" || cmd === "fstats") {
+    ensureUser(userId, userName);
+    const info = db.users[userId];
+    if ((info.allTimeFartCount ?? 0) === 0) return msg.reply("You haven't farted yet! Let it rip! 💨");
+    const isChamp = db.fartChampionId === userId;
+    const embed = new EmbedBuilder()
+      .setTitle(`📊 ${info.name}'s Fart Stats`)
+      .addFields(
+        { name: "This week", value: `💨 ${info.fartCount ?? 0} farts · ${info.fartPoints ?? 0} pts`, inline: false },
+        { name: "All-time farts", value: `🌬️ ${(info.allTimeFartCount ?? 0).toLocaleString()}`, inline: true },
+        { name: "All-time points", value: `⭐ ${Math.round(info.allTimeFartPoints ?? 0).toLocaleString()}`, inline: true },
+        { name: "Weekly wins", value: `👑 ${info.fartWeeklyWins ?? 0}`, inline: true },
+      )
+      .setColor(0xf5d76e)
+      .setFooter({ text: isChamp ? "👑 Reigning Ultimate Farter" : "Let it rip!" });
+    await msg.reply({ embeds: [embed] });
+  }
+
+  // ── !fartfacts ────────────────────────────────────────────
+  else if (cmd === "fartfacts" || cmd === "fartfact") {
+    const facts = [
+      "The average person farts 14–23 times per day — whether they admit it or not. 💨",
+      "Farts are primarily made up of nitrogen, hydrogen, carbon dioxide, oxygen, and methane. Only about 1% is the smelly stuff. 🧪",
+      "The word 'fart' dates back to at least the 13th century, derived from Old English 'feortan.' It's one of the oldest words in the language. 📜",
+      "Women's farts actually smell worse than men's on average — they contain higher concentrations of hydrogen sulfide. 🔬",
+      "Methane in farts is flammable. Hence why lighting farts is a thing. Do not try this at home. 🔥",
+      "Termites are the biggest animal farters by mass — they produce more methane than all other animals combined. 🐜",
+      "Fish fart too. Herring communicate using high-frequency farts. Scientists named it Fast Repetitive Tick (FRT). 🐟",
+      "Holding in a fart doesn't make it disappear — it gets reabsorbed into your bloodstream and can be exhaled through your lungs. 😬",
+      "The technical term for farting is 'flatulence.' A single fart is called 'flatus.' There are actual scientists who study this. 🔬",
+      "Ancient Egyptians had fart jokes — some of the oldest written humor ever discovered is fart-related. 🏺",
+      "Manatees use their farts to swim — stored intestinal gas helps them float and sink like a biological ballast system. 🌊",
+      "Cows produce so much methane from farting and burping that they are a significant contributor to global greenhouse gases. 🐄",
+      "The sound of a fart comes from vibrations of the anal sphincter — higher pressure produces higher pitch. 🎵",
+      "Dogs fart silently more often than humans because their anal sphincter is more relaxed. This is why you never smell it coming. 🐶",
+      "The average fart contains about 200–2000ml of gas depending on diet — enough to fill a small balloon. 🎈",
+      "A fart in a sealed space like an elevator can linger for up to 20 minutes. Choose your elevator companions wisely. 🛗",
+      "Astronauts have to be careful about farting near equipment — methane accumulation in enclosed spacecraft is genuinely dangerous. 🚀",
+      "The hydrogen sulfide in farts smells at concentrations of just 1 part per billion. Your nose is an extremely sensitive fart detector. 👃",
+      "Beans cause extra gas because they contain oligosaccharides — complex sugars humans can't fully digest, so gut bacteria ferment them. 🫘",
+      "Benjamin Franklin once wrote a satirical essay titled 'Fart Proudly' urging scientists to study ways to make farts smell better. 📝",
+      "Hippos spin their tails while defecating to spread waste and scent-mark their territory via farts. Nature is wild. 🦛",
+      "A blue whale's fart bubble is reportedly large enough for a horse to stand in. 🐋",
+      "A fart travels at about 10 feet per second when it exits the body. 💨",
+      "During surgery, electrosurgical tools have ignited gas in the colon causing internal explosions. Bowel prep exists for a reason. 💥",
+      "The fart of a single cow produces enough methane per year to power a small car for about 100 miles. 🚗",
+    ];
+    const fact = facts[Math.floor(Math.random() * facts.length)];
+    const embed = new EmbedBuilder()
+      .setTitle("💨  Fart Fact of the Moment")
+      .setDescription(fact)
+      .setColor(0xf5d76e)
+      .setFooter({ text: "Use !fartfacts again for another one" });
+    await msg.channel.send({ embeds: [embed] });
+  }
+
+  // ── !farthelp ─────────────────────────────────────────────
+  else if (cmd === "farthelp") {
+    const embed = new EmbedBuilder()
+      .setTitle("💨  Fart Bot — Commands")
+      .addFields(
+        { name: "`!fart`", value: "Log a fart and earn a point" },
+        { name: "`!fartlb` / `!flb`", value: "See the weekly fart leaderboard" },
+        { name: "`!fartalltime` / `!fat`", value: "All-time fart hall of fame — never resets" },
+        { name: "`!fartstats` / `!fstats`", value: "Your personal fart stats — weekly and all-time" },
+        { name: "`!fartfacts`", value: "Get a random fart fact" },
+        { name: "`!doublepoints` / `!dp`", value: "Check if double points are active (shared with poop!)" },
+        { name: "⚡ Quick Farter bonus", value: "Fart within 1 hour of your last for +1.5 points!" },
+        { name: "👑 The Ultimate Farter", value: "Awarded to the weekly #1 farter every Monday." },
+      )
+      .setColor(0xf5d76e)
+      .setFooter({ text: "Leaderboard resets every Monday at midnight • !poophelp for poop commands" });
     await msg.channel.send({ embeds: [embed] });
   }
 
@@ -1656,6 +1871,7 @@ client.on("messageCreate", async (msg) => {
         { name: "⚡ Quick pooper bonus", value: "Poop within 2 hours of your last for +1.5 points!" },
         { name: "🐱 Earning kittens", value: "5 kittens per message · 5 kittens per minute in VC" },
 { name: "👑 The Ultimate Shitter", value: "Awarded to the weekly #1 every Monday." },
+        { name: "`!farthelp`", value: "See all fart bot commands 💨" },
       )
       .setColor(0x8b4513)
       .setFooter({ text: "Leaderboard resets every Monday at midnight" });
