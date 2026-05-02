@@ -1654,21 +1654,6 @@ client.on("messageCreate", async (msg) => {
     await msg.reply(`🐱 **${lookupName}** has **${bal.toLocaleString()} kittens**`);
   }
 
-  // ── !taxes ───────────────────────────────────────────────
-  else if (cmd === "taxes") {
-    const pool = db.taxPool ?? 0;
-    const embed = new EmbedBuilder()
-      .setTitle("💸  Daily Tax Jackpot")
-      .setDescription(
-        `**${pool.toLocaleString()} 🐱** accumulated in the tax pool so far.\n\n` +
-        `Every day at **2 PM PST**, 5% of everyone's kittens are collected and awarded to a random winner. ` +
-        `The fewer kittens you have, the higher your odds!`
-      )
-      .setColor(0xe74c3c)
-      .setFooter({ text: "!taxes to check the current pool" })
-      .setTimestamp();
-    await msg.channel.send({ embeds: [embed] });
-  }
 
   // ── !kittenboard ─────────────────────────────────────────
   else if (cmd === "kittenboard" || cmd === "kb") {
@@ -2347,35 +2332,44 @@ client.on("messageCreate", async (msg) => {
         { name: "`!leaderboard` / `!lb`", value: "See the weekly leaderboard" },
         { name: "`!alltime` / `!at`", value: "All-time poop hall of fame — never resets" },
         { name: "`!mystats`", value: "Your personal stats — weekly and all-time" },
-        { name: "`!doublepoints` / `!dp`", value: "Check if double points are active" },
         { name: "`!poopfacts`", value: "Get a random poop fact" },
-        { name: "`!race`", value: "Start a type race — 30s to join with `!join`" },
-        { name: "`!kittens` / `!bal`", value: "Check your kitten balance (or `!kittens @user`)" },
-        { name: "`!kittenboard` / `!kb`", value: "Kitten rich list" },
-        { name: "`!blackjack [open / @users] <bet>`", value: "Play vs the dealer · challenge others directly · or open a public table (anyone `!join`s within 30s) — Hit / Stand buttons appear during your turn" },
-        { name: "`!slots <bet>`", value: "Spin the slot machine — match symbols to win big, 💩💩💩 pays 50×" },
-        { name: "`!trivia <bet>`", value: "Start a trivia round — 20s for others to `!join`, then a poop-flavored question drops for all players · Correct = 2× bet · Wrong or timeout = lose bet" },
         { name: "`!donate @user <amount>`", value: "Donate kittens to another user" },
-        { name: "`!rps <bet>` / `!rps @user <bet>`", value: "Play Rock Paper Scissors vs the house (win doubles your bet, tie refunds it) — or challenge someone 1v1 (winner takes the other's bet)" },
-        { name: "`!rob [@user] <amount> [rps]`", value: "Rob a random user or target a specific one — dice roll (default) or rps · win 1.5× stake · 2 robs/day · 30s to respond" },
-        { name: "`!bomb @user`", value: "Throw a bomb at someone — 20% chance it goes off and obliterates 100 🐱 kittens · deflects to a random server member each miss until it hits" },
-        { name: "`!beg`", value: "Beg the house for kittens — 40% chance of 1–200 🐱, 100% chance of humiliation" },
-        { name: "`!jackpot` / `!megajackpot`", value: "Buy a jackpot ticket (**10 🐱**, 1 in 50) or mega jackpot ticket (**50 🐱**, 1 in 100) — winner takes the whole pot · `!jackpot info` / `!megajackpot info` to see current pots" },
-        { name: "`!taxes`", value: "Check today's tax jackpot pool — 5% of everyone's kittens are collected daily at 2 PM PST and awarded to a random winner (poorer users have better odds)" },
-        { name: "`!crash <bet>`", value: "Bet kittens on a growing multiplier — cash out before it crashes! Others can join with the same bet. (3% house edge, max 2,000 🐱)" },
-        { name: "`!heist <bet>`", value: "Recruit a crew and rob a random rich user — 30% + 10% per member success chance (max 80%). Others join with the same command. (max 1,000 🐱 ante)" },
-        { name: "`!russian <bet>`", value: "Russian roulette — 1 in 6 chance the gun fires on you. Survivors split the dead players' bets. Type to join others. (max 1,500 🐱)" },
-        { name: "`!wyr`", value: "Post a 'Would You Rather' poll — vote with buttons, results revealed after 30 seconds" },
         { name: "`!daily`", value: "Claim a free 150–250 🐱 kittens once per day" },
         { name: "`!cops`", value: "Ping all server admins" },
         { name: "`!report @user`", value: "Report a user for spam — 2 reports triggers a 300 🐱 penalty + 2 min freeze" },
         { name: "⚡ Quick pooper bonus", value: "Poop within 2 hours of your last for +1.5 points!" },
         { name: "🐱 Earning kittens", value: "5 kittens per message · 5 kittens per minute in VC" },
-{ name: "👑 The Ultimate Shitter", value: "Awarded to the weekly #1 every Monday." },
+        { name: "👑 The Ultimate Shitter", value: "Awarded to the weekly #1 every Monday." },
         { name: "`!farthelp`", value: "See all fart bot commands 💨" },
+        { name: "`!gamblinghelp` / `!gh`", value: "See all casino & kitten commands 🎰" },
       )
       .setColor(0x8b4513)
       .setFooter({ text: "Leaderboard resets every Monday at midnight" });
+    await msg.channel.send({ embeds: [embed] });
+  }
+
+  else if (cmd === "gamblinghelp" || cmd === "gh") {
+    const embed = new EmbedBuilder()
+      .setTitle("🎰  Ultimate Shitter Bot — Casino & Kittens")
+      .addFields(
+        { name: "`!kittens` / `!bal`", value: "Check your kitten balance (or `!kittens @user`)" },
+        { name: "`!kittenboard` / `!kb`", value: "Kitten rich list" },
+        { name: "`!wyr`", value: "Post a 'Would You Rather' poll — vote with buttons, results revealed after 30 seconds" },
+        { name: "`!race`", value: "Start a type race — 30s to join with `!join`" },
+        { name: "`!blackjack [open / @users] <bet>`", value: "Play vs the dealer · challenge others directly · or open a public table (anyone `!join`s within 30s) — Hit / Stand buttons appear during your turn" },
+        { name: "`!slots <bet>`", value: "Spin the slot machine — match symbols to win big, 💩💩💩 pays 50×" },
+        { name: "`!trivia <bet>`", value: "Start a trivia round — 20s for others to `!join`, then a poop-flavored question drops for all players · Correct = 2× bet · Wrong or timeout = lose bet" },
+        { name: "`!rps <bet>` / `!rps @user <bet>`", value: "Play Rock Paper Scissors vs the house (win doubles your bet, tie refunds it) — or challenge someone 1v1 (winner takes the other's bet)" },
+        { name: "`!rob [@user] <amount> [rps]`", value: "Rob a random user or target a specific one — dice roll (default) or rps · win 1.5× stake · 2 robs/day · 30s to respond" },
+        { name: "`!bomb @user`", value: "Throw a bomb at someone — 20% chance it goes off and obliterates 100 🐱 kittens · deflects to a random server member each miss until it hits" },
+        { name: "`!beg`", value: "Beg the house for kittens — 40% chance of 1–200 🐱, 100% chance of humiliation" },
+        { name: "`!jackpot` / `!megajackpot`", value: "Buy a jackpot ticket (**10 🐱**, 1 in 50) or mega jackpot ticket (**50 🐱**, 1 in 100) — winner takes the whole pot · `!jackpot info` / `!megajackpot info` to see current pots" },
+        { name: "`!crash <bet>`", value: "Bet kittens on a growing multiplier — cash out before it crashes! Others can join with the same bet. (3% house edge, max 2,000 🐱)" },
+        { name: "`!heist <bet>`", value: "Recruit a crew and rob a random rich user — 30% + 10% per member success chance (max 80%). Others join with the same command. (max 1,000 🐱 ante)" },
+        { name: "`!russian <bet>`", value: "Russian roulette — 1 in 6 chance the gun fires on you. Survivors split the dead players' bets. Type to join others. (max 1,500 🐱)" },
+      )
+      .setColor(0xf1c40f)
+      .setFooter({ text: "5% daily tax at 2 PM PST — poorest players have the best odds of winning the pot" });
     await msg.channel.send({ embeds: [embed] });
   }
   // ── !beg ──────────────────────────────────────────────────
@@ -3411,8 +3405,6 @@ client.on("interactionCreate", async (interaction) => {
 client.once("ready", () => {
   console.log(`[UltimateShitter] Logged in as ${client.user.tag} 💩`);
   client.user.setActivity("the toilet 🚽", { type: 3 });
-  // Run tax immediately on deploy if it hasn't fired today yet
-  if (db.lastTaxDate !== todayStr()) runDailyTax();
 });
 
 client.login(BOT_TOKEN);
