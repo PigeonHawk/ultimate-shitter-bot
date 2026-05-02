@@ -71,6 +71,194 @@ function getRaceWord() {
   return RACE_WORDS[Math.floor(Math.random() * RACE_WORDS.length)];
 }
 
+// ── Trivia question library ────────────────────────────────
+const TRIVIA_QUESTIONS = [
+  // ── Math (poop-flavored) ──
+  {
+    question: "If you poop 3 times a day and each session takes 5 minutes, how many minutes per week do you spend on the toilet?",
+    options: ["85 minutes", "100 minutes", "105 minutes", "120 minutes"],
+    answer: 2,
+  },
+  {
+    question: "A toilet uses 1.6 gallons per flush. You flush 4 times a day. How many gallons per week?",
+    options: ["44.8 gallons", "38.4 gallons", "32 gallons", "52 gallons"],
+    answer: 0,
+  },
+  {
+    question: "Your poop is 75% water. You drop a 200g deuce. How many grams are solid waste?",
+    options: ["150g", "75g", "50g", "25g"],
+    answer: 2,
+  },
+  {
+    question: "The average person produces about 1 pound of poop per day. How many pounds is that in a year?",
+    options: ["365 lbs", "252 lbs", "400 lbs", "300 lbs"],
+    answer: 0,
+  },
+  {
+    question: "If 8 people each poop twice a day, how many total poops happen in 3 days?",
+    options: ["36", "48", "24", "56"],
+    answer: 1,
+  },
+  {
+    question: "What is 13 × 13?",
+    options: ["149", "159", "169", "179"],
+    answer: 2,
+  },
+  {
+    question: "What is the square root of 144?",
+    options: ["10", "11", "12", "13"],
+    answer: 2,
+  },
+  {
+    question: "What is 7 × 8? (Don't blow this one.)",
+    options: ["54", "56", "58", "62"],
+    answer: 1,
+  },
+  // ── Science / Biology ──
+  {
+    question: "What gives poop its signature brown color?",
+    options: ["Dead bacteria", "Bile pigments (bilirubin)", "Old red blood cells", "Undigested food"],
+    answer: 1,
+  },
+  {
+    question: "Roughly what percentage of your poop is actually water?",
+    options: ["25%", "50%", "75%", "90%"],
+    answer: 2,
+  },
+  {
+    question: "How long is the average adult's small intestine?",
+    options: ["About 6 feet", "About 20 feet", "About 10 feet", "About 30 feet"],
+    answer: 1,
+  },
+  {
+    question: "What is the correct order food travels through your body?",
+    options: [
+      "Mouth → Stomach → Large intestine → Small intestine",
+      "Mouth → Esophagus → Small intestine → Stomach",
+      "Mouth → Esophagus → Stomach → Small intestine → Large intestine",
+      "Mouth → Stomach → Esophagus → Small intestine",
+    ],
+    answer: 2,
+  },
+  {
+    question: "Which organ absorbs most of your nutrients?",
+    options: ["Stomach", "Large intestine", "Small intestine", "Liver"],
+    answer: 2,
+  },
+  {
+    question: "What is the medical term for farting?",
+    options: ["Eructation", "Flatulence", "Borborygmus", "Defecation"],
+    answer: 1,
+  },
+  {
+    question: "Which gas is primarily responsible for making farts smell?",
+    options: ["Carbon dioxide", "Nitrogen", "Hydrogen sulfide", "Methane"],
+    answer: 2,
+  },
+  {
+    question: "Which animal is famous for producing perfectly cube-shaped poop?",
+    options: ["Penguin", "Koala", "Wombat", "Capybara"],
+    answer: 2,
+  },
+  {
+    question: "On average, how many times do humans fart per day?",
+    options: ["3–5 times", "8–10 times", "14–23 times", "30–40 times"],
+    answer: 2,
+  },
+  {
+    question: "The Bristol Stool Scale — used by doctors to classify poop — has how many types?",
+    options: ["5 types", "7 types", "9 types", "12 types"],
+    answer: 1,
+  },
+  {
+    question: "What is the powerhouse of the cell?",
+    options: ["Nucleus", "Ribosome", "Mitochondria", "Golgi apparatus"],
+    answer: 2,
+  },
+  {
+    question: "What gas do plants absorb during photosynthesis?",
+    options: ["Oxygen", "Nitrogen", "Carbon dioxide", "Hydrogen"],
+    answer: 2,
+  },
+  {
+    question: "How many bones are in the adult human body?",
+    options: ["186", "206", "226", "246"],
+    answer: 1,
+  },
+  {
+    question: "What does DNA stand for?",
+    options: ["Deoxyribonucleic Acid", "Deoxyribose Nitrogen Acid", "Dynamic Nucleic Array", "Distal Nucleotide Assembly"],
+    answer: 0,
+  },
+  // ── History / Trivia ──
+  {
+    question: "When was toilet paper first commercially sold in the United States?",
+    options: ["1835", "1857", "1901", "1920"],
+    answer: 1,
+  },
+  {
+    question: "Which ancient civilization is credited with building some of the earliest sewage systems?",
+    options: ["Ancient Egyptians", "Ancient Greeks", "Indus Valley Civilization", "Ancient Chinese"],
+    answer: 2,
+  },
+  {
+    question: "Thomas Crapper is famous for popularizing which invention?",
+    options: ["The bidet", "The flush toilet", "Toilet paper", "Indoor plumbing pipes"],
+    answer: 1,
+  },
+  {
+    question: "Who wrote Romeo and Juliet?",
+    options: ["Charles Dickens", "William Shakespeare", "Mark Twain", "Jane Austen"],
+    answer: 1,
+  },
+  {
+    question: "In what year did humans first land on the moon?",
+    options: ["1965", "1967", "1969", "1972"],
+    answer: 2,
+  },
+  // ── Geography / General ──
+  {
+    question: "Which planet is named after the Roman god of the sky — and is also a perpetual 8th-grade joke?",
+    options: ["Neptune", "Saturn", "Uranus", "Jupiter"],
+    answer: 2,
+  },
+  {
+    question: "What is the capital of France? (Even poop-brains should get this one.)",
+    options: ["London", "Madrid", "Berlin", "Paris"],
+    answer: 3,
+  },
+  {
+    question: "How many continents are on Earth?",
+    options: ["5", "6", "7", "8"],
+    answer: 2,
+  },
+  {
+    question: "What is the largest ocean on Earth?",
+    options: ["Atlantic Ocean", "Indian Ocean", "Arctic Ocean", "Pacific Ocean"],
+    answer: 3,
+  },
+  {
+    question: "What is the chemical formula for water — the main ingredient in your poop?",
+    options: ["H2O2", "HO2", "H2O", "CO2"],
+    answer: 2,
+  },
+  {
+    question: "What is the largest country in the world by land area?",
+    options: ["Canada", "China", "USA", "Russia"],
+    answer: 3,
+  },
+  {
+    question: "What is the approximate speed of light?",
+    options: ["186,000 miles per second", "100,000 miles per second", "300,000 miles per hour", "1,000 miles per second"],
+    answer: 0,
+  },
+  {
+    question: "Which continent is the Sahara Desert located on?",
+    options: ["Asia", "South America", "Australia", "Africa"],
+    answer: 3,
+  },
+];
+
 // ── Persistence ────────────────────────────────────────────
 function loadData() {
   if (fs.existsSync(DATA_FILE)) {
@@ -473,6 +661,32 @@ function getSlotsResult(reels) {
 
 // ── Race state ─────────────────────────────────────────────
 const activeRaces = new Map();
+
+// ── Trivia state ───────────────────────────────────────────
+const activeTrivias = new Map();
+
+async function revealTrivia(trivia) {
+  const { bet, participants, answers, question, letters, questionMsg } = trivia;
+  const optionsText = question.options.map((opt, i) => `**${letters[i]}.** ${opt}`).join("\n");
+  const correctLetter = letters[question.answer];
+
+  const resultLines = [...participants.entries()].map(([uid, name]) => {
+    const choice = answers.get(uid);
+    if (choice === question.answer) {
+      addKittens(uid, bet * 2);
+      return `✅ **${name}** — CORRECT! (+${bet.toLocaleString()} 🐱)`;
+    }
+    return `❌ **${name}** — ${choice !== undefined ? "WRONG" : "TIMED OUT"} (-${bet.toLocaleString()} 🐱)`;
+  }).join("\n");
+
+  const embed = new EmbedBuilder()
+    .setTitle("🧠  Trivia — Results")
+    .setDescription(`**${question.question}**\n\n${optionsText}\n\n**Answer: ${correctLetter}. ${question.options[question.answer]}**\n\n${resultLines}`)
+    .setColor(0x9b59b6)
+    .setTimestamp();
+
+  if (questionMsg) await questionMsg.edit({ embeds: [embed], components: [] }).catch(() => {});
+}
 
 // ── Bot client ─────────────────────────────────────────────
 const client = new Client({
@@ -1244,6 +1458,19 @@ client.on("messageCreate", async (msg) => {
   // ── !join ─────────────────────────────────────────────────
   else if (cmd === "join") {
     const channelId = msg.channel.id;
+
+    const trivia = activeTrivias.get(channelId);
+    if (trivia && trivia.phase === "joining") {
+      if (trivia.participants.has(userId)) return msg.reply("❌ You're already in the trivia!");
+      const balance = getKittens(userId);
+      if (balance < trivia.bet) return msg.reply(`❌ You need **${trivia.bet.toLocaleString()} 🐱 kittens** to join!`);
+      ensureUser(userId, userName);
+      removeKittens(userId, trivia.bet);
+      trivia.participants.set(userId, userName);
+      await msg.reply(`✅ **${userName}** joined the trivia! (${trivia.participants.size} players so far)`);
+      return;
+    }
+
     const race = activeRaces.get(channelId);
     if (race && race.phase === "joining") {
       if (race.participants.has(userId)) return msg.reply("❌ You're already in the race!");
@@ -1360,6 +1587,7 @@ client.on("messageCreate", async (msg) => {
         { name: "`!blackjack open <bet>`", value: "Open a public table — anyone can `!join` within 30s" },
         { name: "`!blackjack` buttons", value: "Hit / Stand buttons appear during your turn" },
         { name: "`!slots <bet>`", value: "Spin the slot machine — match symbols to win big, 💩💩💩 pays 50×" },
+        { name: "`!trivia <bet>`", value: "Start a trivia round — 20s for others to `!join`, then a poop-flavored question drops for all players · Correct = 2× bet · Wrong or timeout = lose bet" },
         { name: "`!donate @user <amount>`", value: "Donate kittens to another user" },
         { name: "`!rps <bet>`", value: "Play Rock Paper Scissors vs the house — win doubles your bet, tie refunds it" },
         { name: "`!rps @user <bet>`", value: "Challenge someone to 1v1 RPS — winner takes the other's bet" },
@@ -1468,6 +1696,75 @@ client.on("messageCreate", async (msg) => {
       .setFooter({ text: "💩=50x · 🐱=15x · 💎=8x · ⭐=4x · 🍒/🔔=3x · 🍋=2x · Two 💩/🐱 = push" })
       .setTimestamp();
     await msg.channel.send({ embeds: [embed] });
+  }
+
+  // ── !trivia ───────────────────────────────────────────────
+  else if (cmd === "trivia") {
+    const bet = parseInt(args[0]);
+    if (isNaN(bet) || bet <= 0) return msg.reply("Usage: `!trivia <bet>`");
+    const userKittens = getKittens(userId);
+    if (userKittens < bet) return msg.reply(`❌ You only have **${userKittens.toLocaleString()} 🐱 kittens**!`);
+    if (activeTrivias.has(msg.channel.id)) return msg.reply("❌ A trivia question is already active in this channel!");
+
+    ensureUser(userId, userName);
+    removeKittens(userId, bet);
+
+    const channelId = msg.channel.id;
+    const participants = new Map([[userId, userName]]);
+    const trivia = {
+      phase: "joining",
+      bet,
+      participants,
+      answers: new Map(),
+      question: null,
+      letters: ["A", "B", "C", "D"],
+      timeout: null,
+      questionMsg: null,
+      channelId,
+    };
+    activeTrivias.set(channelId, trivia);
+
+    const joinEmbed = new EmbedBuilder()
+      .setTitle("🧠  Trivia — Joining Phase")
+      .setDescription(`**${userName}** started a trivia round!\nType \`!join\` to enter — question drops in **20 seconds**!\n\nBet: **${bet.toLocaleString()} 🐱 kittens** · Correct = 2× bet`)
+      .setColor(0x9b59b6)
+      .setFooter({ text: "All participants must bet the same amount" });
+    await msg.channel.send({ embeds: [joinEmbed] });
+
+    trivia.timeout = setTimeout(async () => {
+      const current = activeTrivias.get(channelId);
+      if (!current || current.phase !== "joining") return;
+
+      const q = TRIVIA_QUESTIONS[Math.floor(Math.random() * TRIVIA_QUESTIONS.length)];
+      current.question = q;
+      current.phase = "answering";
+
+      const optionsText = q.options.map((opt, i) => `**${current.letters[i]}.** ${opt}`).join("\n");
+      const playerList = [...current.participants.values()].map(n => `• ${n}`).join("\n");
+      const row = new ActionRowBuilder().addComponents(
+        current.letters.map((letter, i) =>
+          new ButtonBuilder()
+            .setCustomId(`trivia_${channelId}_${i}`)
+            .setLabel(letter)
+            .setStyle(ButtonStyle.Primary)
+        )
+      );
+
+      const questionEmbed = new EmbedBuilder()
+        .setTitle("🧠  Are You Smarter Than a 5th Grader?")
+        .setDescription(`**${q.question}**\n\n${optionsText}`)
+        .setColor(0x9b59b6)
+        .addFields({ name: "Players", value: playerList })
+        .setFooter({ text: "30 seconds to answer · Correct = 2× bet · Wrong or timeout = lose bet" })
+        .setTimestamp();
+
+      current.questionMsg = await msg.channel.send({ embeds: [questionEmbed], components: [row] });
+
+      current.timeout = setTimeout(async () => {
+        activeTrivias.delete(channelId);
+        await revealTrivia(current);
+      }, 30_000);
+    }, 20_000);
   }
 
   else if (cmd === "cops") {
@@ -1761,6 +2058,35 @@ client.on("interactionCreate", async (interaction) => {
       .setTimestamp();
 
     await interaction.update({ embeds: [finalEmbed], components: [] });
+  }
+});
+
+// ── Trivia interactions ────────────────────────────────────
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isButton()) return;
+  const { customId, user } = interaction;
+  if (!customId.startsWith("trivia_")) return;
+
+  const [, channelId, choiceStr] = customId.split("_");
+  const choice = parseInt(choiceStr);
+
+  const trivia = activeTrivias.get(channelId);
+  if (!trivia || trivia.phase !== "answering") return interaction.reply({ content: "❌ This question has already ended.", ephemeral: true });
+  if (!trivia.participants.has(user.id)) return interaction.reply({ content: "❌ You're not in this trivia round!", ephemeral: true });
+  if (trivia.answers.has(user.id)) return interaction.reply({ content: "❌ You've already locked in an answer!", ephemeral: true });
+
+  trivia.answers.set(user.id, choice);
+  const remaining = trivia.participants.size - trivia.answers.size;
+
+  await interaction.reply({
+    content: `✅ Answer locked in! ${remaining > 0 ? `Waiting on **${remaining}** more player${remaining === 1 ? "" : "s"}...` : "Everyone's answered!"}`,
+    ephemeral: true,
+  });
+
+  if (trivia.answers.size === trivia.participants.size) {
+    clearTimeout(trivia.timeout);
+    activeTrivias.delete(channelId);
+    await revealTrivia(trivia);
   }
 });
 
