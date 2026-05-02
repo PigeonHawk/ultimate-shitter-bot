@@ -385,6 +385,7 @@ function buildLeaderboardEmbed(data, guildMembers) {
 // ── Rob helpers ────────────────────────────────────────────
 const pendingRobs = new Map();
 const ROB_DAILY_LIMIT = 2;
+const JACKPOT_DAILY_LIMIT = 5;
 const ROB_RPS_TIMEOUT_MS = 30_000;
 
 // ── Blackjack helpers ──────────────────────────────────────
@@ -1799,6 +1800,15 @@ client.on("messageCreate", async (msg) => {
     const userKittens = getKittens(userId);
     if (userKittens < TICKET_COST) return msg.reply(`❌ You need **${TICKET_COST} 🐱 kittens** for a ticket — you only have **${userKittens.toLocaleString()} 🐱**.`);
 
+    const today = todayStr();
+    const jackpotUser = db.users[userId];
+    if (jackpotUser.lastJackpotDate !== today) { jackpotUser.jackpotToday = 0; jackpotUser.lastJackpotDate = today; }
+    const jackpotUsed = jackpotUser.jackpotToday ?? 0;
+    if (jackpotUsed >= JACKPOT_DAILY_LIMIT) {
+      return msg.reply(`❌ You've bought **${JACKPOT_DAILY_LIMIT} jackpot tickets** today already. Come back tomorrow!`);
+    }
+    jackpotUser.jackpotToday = jackpotUsed + 1;
+
     removeKittens(userId, TICKET_COST);
     db.jackpot.pot += TICKET_COST;
     db.jackpot.ticketCount += 1;
@@ -1829,7 +1839,7 @@ client.on("messageCreate", async (msg) => {
         .setDescription(`<@${userId}> bought a ticket — nothing this time.\n\n🏦 **Pot: ${db.jackpot.pot.toLocaleString()} 🐱** · Tickets sold: **${db.jackpot.ticketCount.toLocaleString()}**`)
         .setColor(0x95a5a6)
         .addFields({ name: userName, value: `${getKittens(userId).toLocaleString()} 🐱`, inline: true })
-        .setFooter({ text: "1 in 50 chance to win · !jackpot to try again" })
+        .setFooter({ text: `1 in 50 chance to win · ${JACKPOT_DAILY_LIMIT - jackpotUser.jackpotToday} ticket${JACKPOT_DAILY_LIMIT - jackpotUser.jackpotToday === 1 ? "" : "s"} left today · !jackpot to try again` })
         .setTimestamp();
       await msg.channel.send({ embeds: [embed] });
     }
@@ -1868,6 +1878,15 @@ client.on("messageCreate", async (msg) => {
     const userKittens = getKittens(userId);
     if (userKittens < TICKET_COST) return msg.reply(`❌ You need **${TICKET_COST} 🐱 kittens** for a mega ticket — you only have **${userKittens.toLocaleString()} 🐱**.`);
 
+    const today = todayStr();
+    const megaUser = db.users[userId];
+    if (megaUser.lastMegaJackpotDate !== today) { megaUser.megaJackpotToday = 0; megaUser.lastMegaJackpotDate = today; }
+    const megaUsed = megaUser.megaJackpotToday ?? 0;
+    if (megaUsed >= JACKPOT_DAILY_LIMIT) {
+      return msg.reply(`❌ You've bought **${JACKPOT_DAILY_LIMIT} mega jackpot tickets** today already. Come back tomorrow!`);
+    }
+    megaUser.megaJackpotToday = megaUsed + 1;
+
     removeKittens(userId, TICKET_COST);
     db.megaJackpot.pot += TICKET_COST;
     db.megaJackpot.ticketCount += 1;
@@ -1898,7 +1917,7 @@ client.on("messageCreate", async (msg) => {
         .setDescription(`<@${userId}> bought a mega ticket — nothing this time.\n\n🏦 **Mega pot: ${db.megaJackpot.pot.toLocaleString()} 🐱** · Tickets sold: **${db.megaJackpot.ticketCount.toLocaleString()}**`)
         .setColor(0x95a5a6)
         .addFields({ name: userName, value: `${getKittens(userId).toLocaleString()} 🐱`, inline: true })
-        .setFooter({ text: "1 in 100 chance to win · !megajackpot to try again" })
+        .setFooter({ text: `1 in 100 chance to win · ${JACKPOT_DAILY_LIMIT - megaUser.megaJackpotToday} ticket${JACKPOT_DAILY_LIMIT - megaUser.megaJackpotToday === 1 ? "" : "s"} left today · !megajackpot to try again` })
         .setTimestamp();
       await msg.channel.send({ embeds: [embed] });
     }
