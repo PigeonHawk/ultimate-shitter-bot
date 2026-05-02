@@ -2075,6 +2075,7 @@ client.on("messageCreate", async (msg) => {
   else if (cmd === "trivia") {
     const bet = parseInt(args[0]);
     if (isNaN(bet) || bet <= 0) return msg.reply("Usage: `!trivia <bet>`");
+    if (bet > 500) return msg.reply("❌ The maximum trivia bet is **500 🐱 kittens**!");
     const userKittens = getKittens(userId);
     if (userKittens < bet) return msg.reply(`❌ You only have **${userKittens.toLocaleString()} 🐱 kittens**!`);
     if (activeTrivias.has(msg.channel.id)) return msg.reply("❌ A trivia question is already active in this channel!");
