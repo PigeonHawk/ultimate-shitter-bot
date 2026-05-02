@@ -265,7 +265,7 @@ function loadData() {
   if (fs.existsSync(DATA_FILE)) {
     return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
   }
-  return { users: {}, weekStart: todayStr(), championId: null };
+  return { users: {}, weekStart: todayStr(), championId: null, taxPool: 0 };
 }
 
 function saveData(data) {
@@ -824,6 +824,85 @@ cron.schedule("0 0 * * 1", () => {
 
 cron.schedule("0 0 * * *", () => pickTodaysWindows());
 
+// ── Daily tax collection & jackpot ─────────────────────────
+const EKITTEN_ROLE_NAME = "ekitten :3";
+
+async function runDailyTax() {
+  if (!db.taxPool) db.taxPool = 0;
+
+  // Build set of user IDs who have the ekitten :3 role across all guilds
+  const eligibleIds = new Set();
+  for (const guild of client.guilds.cache.values()) {
+    await guild.members.fetch().catch(() => {});
+    const role = guild.roles.cache.find((r) => r.name === EKITTEN_ROLE_NAME);
+    if (!role) continue;
+    guild.members.cache.forEach((member) => {
+      if (member.roles.cache.has(role.id)) eligibleIds.add(member.id);
+    });
+  }
+
+  // Collect 5% from eligible users who have kittens
+  let collected = 0;
+  Object.entries(db.users).forEach(([id, user]) => {
+    if (!eligibleIds.has(id)) return;
+    const bal = user.kittens ?? 0;
+    if (bal <= 0) return;
+    const tax = Math.max(1, Math.floor(bal * 0.05));
+    user.kittens = Math.max(0, bal - tax);
+    collected += tax;
+  });
+  db.taxPool += collected;
+  db.lastTaxDate = todayStr();
+
+  if (db.taxPool <= 0) {
+    saveData(db);
+    return;
+  }
+
+  // Only eligible users can win — weight = 1 / (kittens + 1), poorer users win more often
+  const entries = Object.entries(db.users).filter(([id]) => eligibleIds.has(id));
+  if (entries.length === 0) { saveData(db); return; }
+
+  const weights = entries.map(([, u]) => 1 / ((u.kittens ?? 0) + 1));
+  const totalWeight = weights.reduce((a, b) => a + b, 0);
+  let rand = Math.random() * totalWeight;
+  let winnerId = entries[entries.length - 1][0];
+  for (let i = 0; i < entries.length; i++) {
+    rand -= weights[i];
+    if (rand <= 0) { winnerId = entries[i][0]; break; }
+  }
+
+  const prize = db.taxPool;
+  db.taxPool = 0;
+  db.users[winnerId].kittens = (db.users[winnerId].kittens ?? 0) + prize;
+  saveData(db);
+
+  // Announce in 🤑golden-saucer or fallback
+  client.guilds.cache.forEach(async (guild) => {
+    const channel = guild.channels.cache.find(
+      (c) => c.name === "🤑golden-saucer" || c.name === "golden-saucer" || c.name === "general"
+    );
+    if (!channel) return;
+    const winner = guild.members.cache.get(winnerId) ?? await guild.members.fetch(winnerId).catch(() => null);
+    const winnerName = winner?.displayName ?? db.users[winnerId]?.name ?? "Unknown";
+    const winnerBal = (db.users[winnerId]?.kittens ?? 0).toLocaleString();
+    const embed = new EmbedBuilder()
+      .setTitle("💸  Daily Tax Jackpot!")
+      .setDescription(
+        `The IRS has collected **${collected.toLocaleString()} 🐱** in taxes today.\n\n` +
+        `🎉 **${winnerName}** won the jackpot of **${prize.toLocaleString()} 🐱**!\n\n` +
+        `*(The fewer kittens you have, the better your odds)*`
+      )
+      .addFields({ name: winnerName, value: `${winnerBal} 🐱 (after winning)`, inline: true })
+      .setColor(0xe74c3c)
+      .setTimestamp();
+    await channel.send({ embeds: [embed] }).catch(() => {});
+  });
+}
+
+// 2 pm PST = 22:00 UTC
+cron.schedule("0 22 * * *", () => runDailyTax());
+
 // ── VC tracking ────────────────────────────────────────────
 const vcJoinTimes = new Map();
 
@@ -1177,6 +1256,22 @@ client.on("messageCreate", async (msg) => {
     const lookupName = target?.username ?? userName;
     const bal = getKittens(lookupId);
     await msg.reply(`🐱 **${lookupName}** has **${bal.toLocaleString()} kittens**`);
+  }
+
+  // ── !taxes ───────────────────────────────────────────────
+  else if (cmd === "taxes") {
+    const pool = db.taxPool ?? 0;
+    const embed = new EmbedBuilder()
+      .setTitle("💸  Daily Tax Jackpot")
+      .setDescription(
+        `**${pool.toLocaleString()} 🐱** accumulated in the tax pool so far.\n\n` +
+        `Every day at **2 PM PST**, 5% of everyone's kittens are collected and awarded to a random winner. ` +
+        `The fewer kittens you have, the higher your odds!`
+      )
+      .setColor(0xe74c3c)
+      .setFooter({ text: "!taxes to check the current pool" })
+      .setTimestamp();
+    await msg.channel.send({ embeds: [embed] });
   }
 
   // ── !kittenboard ─────────────────────────────────────────
@@ -1870,6 +1965,7 @@ client.on("messageCreate", async (msg) => {
         { name: "`!bomb @user`", value: "Throw a bomb at someone — 20% chance it goes off and obliterates 100 🐱 kittens · deflects to a random server member each miss until it hits" },
         { name: "`!beg`", value: "Beg the house for kittens — 40% chance of 1–200 🐱, 100% chance of humiliation" },
         { name: "`!jackpot` / `!megajackpot`", value: "Buy a jackpot ticket (**10 🐱**, 1 in 50) or mega jackpot ticket (**50 🐱**, 1 in 100) — winner takes the whole pot · `!jackpot info` / `!megajackpot info` to see current pots" },
+        { name: "`!taxes`", value: "Check today's tax jackpot pool — 5% of everyone's kittens are collected daily at 2 PM PST and awarded to a random winner (poorer users have better odds)" },
         { name: "`!cops`", value: "Ping all server admins" },
         { name: "`!report @user`", value: "Report a user for spam — 2 reports triggers a 300 🐱 penalty + 2 min freeze" },
         { name: "⚡ Quick pooper bonus", value: "Poop within 2 hours of your last for +1.5 points!" },
@@ -2542,6 +2638,8 @@ client.on("interactionCreate", async (interaction) => {
 client.once("ready", () => {
   console.log(`[UltimateShitter] Logged in as ${client.user.tag} 💩`);
   client.user.setActivity("the toilet 🚽", { type: 3 });
+  // Run tax immediately on deploy if it hasn't fired today yet
+  if (db.lastTaxDate !== todayStr()) runDailyTax();
 });
 
 client.login(BOT_TOKEN);
