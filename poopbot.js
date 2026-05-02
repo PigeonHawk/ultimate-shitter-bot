@@ -1218,7 +1218,14 @@ cron.schedule("0 0 * * 1", () => {
   saveData(db);
 });
 
-cron.schedule("0 0 * * *", () => pickTodaysWindows());
+cron.schedule("0 0 * * *", () => {
+  pickTodaysWindows();
+  for (const user of Object.values(db.users)) {
+    user.jackpotToday = 0;
+    user.megaJackpotToday = 0;
+  }
+  saveData(db);
+});
 
 // ── Daily tax collection & jackpot ─────────────────────────
 const EKITTEN_ROLE_NAME = "ekitten :3";
