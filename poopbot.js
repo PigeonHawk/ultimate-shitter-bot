@@ -1308,9 +1308,6 @@ function runDailyReset() {
   saveData(db);
 }
 
-console.log("[UltimateShitter] Running daily reset on startup.");
-runDailyReset();
-
 // ── Weekly reset ───────────────────────────────────────────
 cron.schedule("0 0 * * 1", () => {
   console.log("[UltimateShitter] Weekly reset!");
