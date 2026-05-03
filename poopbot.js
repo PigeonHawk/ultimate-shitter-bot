@@ -609,11 +609,7 @@ function saveData(data) {
 }
 
 function todayStr() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
 }
 
 function ensureUser(userId, name) {
@@ -1302,7 +1298,24 @@ const client = new Client({
 });
 
 let db = loadData();
-pickTodaysWindows();
+
+function runDailyReset() {
+  pickTodaysWindows();
+  for (const user of Object.values(db.users)) {
+    user.jackpotToday = 0;
+    user.megaJackpotToday = 0;
+  }
+  db.lastDailyReset = todayStr();
+  saveData(db);
+}
+
+// Reset on deploy if it hasn't happened yet today (PST)
+if (db.lastDailyReset !== todayStr()) {
+  console.log("[UltimateShitter] Daily reset not yet run today — running on startup.");
+  runDailyReset();
+} else {
+  pickTodaysWindows();
+}
 
 // ── Weekly reset ───────────────────────────────────────────
 cron.schedule("0 0 * * 1", () => {
@@ -1366,16 +1379,11 @@ cron.schedule("0 0 * * 1", () => {
   });
   db.weekStart = todayStr();
   saveData(db);
-});
+}, { timezone: "America/Los_Angeles" });
 
 cron.schedule("0 0 * * *", () => {
-  pickTodaysWindows();
-  for (const user of Object.values(db.users)) {
-    user.jackpotToday = 0;
-    user.megaJackpotToday = 0;
-  }
-  saveData(db);
-});
+  runDailyReset();
+}, { timezone: "America/Los_Angeles" });
 
 // ── Daily tax collection & jackpot ─────────────────────────
 const EKITTEN_ROLE_NAME = "ekitten :3";
