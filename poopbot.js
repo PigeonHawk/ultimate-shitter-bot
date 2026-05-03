@@ -1304,18 +1304,15 @@ function runDailyReset() {
   for (const user of Object.values(db.users)) {
     user.jackpotToday = 0;
     user.megaJackpotToday = 0;
+    user.robsToday = 0;
+    user.begCount = 0;
   }
   db.lastDailyReset = todayStr();
   saveData(db);
 }
 
-// Reset on deploy if it hasn't happened yet today (PST)
-if (db.lastDailyReset !== todayStr()) {
-  console.log("[UltimateShitter] Daily reset not yet run today — running on startup.");
-  runDailyReset();
-} else {
-  pickTodaysWindows();
-}
+console.log("[UltimateShitter] Running daily reset on startup.");
+runDailyReset();
 
 // ── Weekly reset ───────────────────────────────────────────
 cron.schedule("0 0 * * 1", () => {
