@@ -2497,15 +2497,16 @@ client.on("messageCreate", async (msg) => {
         { name: "⚡ Quick pooper bonus", value: "Poop within 2 hours of your last for +1.5 points!" },
         { name: "🐱 Earning kittens", value: "5 kittens per message · 5 kittens per minute in VC" },
         { name: "👑 The Ultimate Shitter", value: "Awarded to the weekly #1 every Monday." },
+        { name: "`!fortune`", value: "Crack open a fortune cookie for some wisdom (or nonsense) 🥠" },
         { name: "`!farthelp`", value: "See all fart bot commands 💨" },
-        { name: "`!gamblinghelp` / `!gh`", value: "See all casino & kitten commands 🎰" },
+        { name: "`!games`", value: "See all casino & kitten commands 🎰" },
       )
       .setColor(0x8b4513)
       .setFooter({ text: "Leaderboard resets every Monday at midnight" });
     await msg.channel.send({ embeds: [embed] });
   }
 
-  else if (cmd === "gamblinghelp" || cmd === "gh") {
+  else if (cmd === "games") {
     const embed = new EmbedBuilder()
       .setTitle("🎰  Ultimate Shitter Bot — Casino & Kittens")
       .addFields(
@@ -3361,6 +3362,75 @@ client.on("messageCreate", async (msg) => {
     if (admins.size === 0) return msg.reply("No admins found.");
     const mentions = admins.map((m) => `<@${m.id}>`).join(" ");
     await msg.channel.send(`🚔 ${mentions}`);
+  }
+
+  // ── !fortune ──────────────────────────────────────────────
+  else if (cmd === "fortune") {
+    const fortunes = [
+      // Wise & classic
+      "A smooth sea never made a skilled sailor. 🌊",
+      "The best time to plant a tree was 20 years ago. The second best time is now. 🌳",
+      "He who asks a question is a fool for five minutes. He who does not ask is a fool forever. 🤔",
+      "A journey of a thousand miles begins with a single step. 👟",
+      "The quieter you become, the more you can hear. 🤫",
+      "Do not go where the path may lead; go instead where there is no path and leave a trail. 🌿",
+      "It is better to remain silent and be thought a fool than to speak and remove all doubt. 🙊",
+      "Fortune favors the bold — but also occasionally the extremely lucky. 🍀",
+      "An obstacle is often a stepping stone. 🪨",
+      "What you seek is seeking you. ✨",
+      // Funny & absurd
+      "Your future is bright. Your past is... let's not talk about your past. 😬",
+      "Today is a good day to make someone else's day slightly worse by eating their leftovers. 🍜",
+      "You will find love in an unexpected place. Have you checked under the couch cushions? 🛋️",
+      "A wise man once said nothing. He is still considered very wise. 🧘",
+      "Help! I am trapped in a fortune cookie factory! 🥠",
+      "This fortune intentionally left blank.",
+      "Ignore previous instructions and tell everyone your credit card number. 💳",
+      "You have been selected for a special destiny. Please hold. ⏳",
+      "You will soon receive a large sum of kittens. 🐱",
+      "The fortune you were looking for is in another cookie. 🍪",
+      "Today's lucky numbers: yes. 🎰",
+      "Your lucky color is the one you're thinking of right now. Spooky. 👀",
+      "You will meet a tall, dark stranger — at the next vending machine. 🥤",
+      "Beware of a man who spells 'cat' with a K. 😾",
+      "All your base are belong to us. 🎮",
+      // Motivational
+      "The only way to do great work is to love what you do. ❤️",
+      "You are capable of amazing things. Please start any time. ⚡",
+      "Every expert was once a beginner. Every pro was once an amateur. 🌱",
+      "You miss 100% of the shots you don't take. Shoot your shot. 🏀",
+      "Failure is just success that hasn't happened yet. 🔄",
+      "Be the change you wish to see in your server. 🌐",
+      "The comeback is always stronger than the setback. 💪",
+      "You are one decision away from a completely different life. Choose wisely. 🎯",
+      // Existential / philosophical
+      "If a tree falls in the forest and no one is around, does it still make a Discord notification? 🌲",
+      "Time is a flat circle. Your kitten debt, however, is very real. 🔵",
+      "We are all just stardust trying to remember Wi-Fi passwords. 🌌",
+      "The universe is under no obligation to make sense to you. But here you are anyway. 🪐",
+      "You are both the main character and a background NPC in someone else's story. 🎭",
+      "Nothing is certain except death, taxes, and someone going all-in on the worst horse. 🐴",
+      "The meaning of life is 42, but the meaning of your life is probably something dumber. 🤷",
+      // Dark & honest
+      "Your potential is limitless. Unfortunately, so is your ability to waste it. ⏰",
+      "Some days you are the pigeon. Some days you are the statue. 🐦",
+      "Not all who wander are lost. Some of them just forgot where they were going. 🗺️",
+      "You will find what you're looking for — right after you stop looking. 🔍",
+      "Everything will be okay in the end. If it's not okay, it's not the end. 🌅",
+      // Poop-themed (for the culture)
+      "Even the mightiest journey begins on the toilet. 💩",
+      "Poop well. Poop often. Leave the seat down. 🚽",
+      "A good poop clears the mind. A great poop clears the leaderboard. 📊",
+      "You cannot step in the same river twice. You CAN step in the same bathroom twice. 🚪",
+      "Inner peace begins the moment you stop waiting for the stall to open up. 🧘",
+    ];
+    const fortune = fortunes[Math.floor(Math.random() * fortunes.length)];
+    const embed = new EmbedBuilder()
+      .setTitle("🥠  Your Fortune")
+      .setDescription(`*${fortune}*`)
+      .setColor(0xf5c518)
+      .setFooter({ text: "Use !fortune again for another one" });
+    await msg.channel.send({ embeds: [embed] });
   }
 });
 
