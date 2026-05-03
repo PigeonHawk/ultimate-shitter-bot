@@ -1302,10 +1302,7 @@ let db = loadData();
 function runDailyReset() {
   pickTodaysWindows();
   for (const user of Object.values(db.users)) {
-    user.jackpotToday = 0;
-    user.megaJackpotToday = 0;
-    user.robsToday = 0;
-    user.begCount = 0;
+    user.lastDailyDate = null;
   }
   db.lastDailyReset = todayStr();
   saveData(db);
