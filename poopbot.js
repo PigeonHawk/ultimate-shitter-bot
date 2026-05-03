@@ -1117,6 +1117,49 @@ const activeWyrs = new Map();
 const activeHeists = new Map();
 const activeRussians = new Map();
 
+// ── Hangman helpers ────────────────────────────────────────
+const activeHangman = new Map();
+const HANGMAN_WORDS = [
+  "poop", "fart", "toilet", "plunger", "sewer", "stench", "latrine",
+  "outhouse", "cesspool", "flatulence", "methane", "fungus", "mildew",
+  "rancid", "putrid", "compost", "manure", "bacteria", "odorous",
+  "discord", "gambling", "jackpot", "casino", "heist", "robbery",
+  "pirate", "dungeon", "dragon", "wizard", "goblin", "phantom",
+  "specter", "zombie", "vampire", "werewolf", "skeleton", "ghoul",
+  "hurricane", "tornado", "tsunami", "avalanche", "volcano", "blizzard",
+  "crocodile", "rhinoceros", "platypus", "armadillo", "chameleon",
+  "salamander", "anaconda", "scorpion", "tarantula", "saxophone",
+  "accordion", "tambourine", "buffoonery", "shenanigans", "tomfoolery",
+  "mischief", "kerfuffle", "hullabaloo", "brouhaha", "balderdash",
+  "flabbergasted", "gobsmacked", "bamboozle", "discombobulate",
+  "catastrophe", "pandemonium", "juggernaut", "conflagration",
+  "boisterous", "loquacious", "perspicacious", "obstreperous",
+  "extravaganza", "kaleidoscope", "paraphernalia", "preposterous",
+  "scoundrel", "knucklehead", "numbskull", "blunderbuss", "skedaddle",
+  "whippersnapper", "nincompoop", "lollygag", "cattywampus",
+  "rapscallion", "skullduggery", "chicanery", "flabbergast", "rascal",
+];
+const HANGMAN_STAGES = [
+  "```\n  +---+\n  |   |\n      |\n      |\n      |\n      |\n=========```",
+  "```\n  +---+\n  |   |\n  O   |\n      |\n      |\n      |\n=========```",
+  "```\n  +---+\n  |   |\n  O   |\n  |   |\n      |\n      |\n=========```",
+  "```\n  +---+\n  |   |\n  O   |\n /|   |\n      |\n      |\n=========```",
+  "```\n  +---+\n  |   |\n  O   |\n /|\\  |\n      |\n      |\n=========```",
+  "```\n  +---+\n  |   |\n  O   |\n /|\\  |\n /    |\n      |\n=========```",
+  "```\n  +---+\n  |   |\n  O   |\n /|\\  |\n / \\  |\n      |\n=========```",
+];
+
+// ── Horse race helpers ─────────────────────────────────────
+const activeHorseRaces = new Map();
+const RACE_HORSES = [
+  { id: 1, name: "Stinky Steve",   emoji: "💩", odds: 2.0,  maxStep: 5.0 },
+  { id: 2, name: "Kitty Gallop",   emoji: "🐱", odds: 3.0,  maxStep: 4.0 },
+  { id: 3, name: "Lightning Butt", emoji: "⚡", odds: 5.0,  maxStep: 3.0 },
+  { id: 4, name: "Golden Nugget",  emoji: "🌟", odds: 8.0,  maxStep: 2.2 },
+  { id: 5, name: "Space Pooper",   emoji: "🚀", odds: 12.0, maxStep: 1.6 },
+];
+const HORSE_RACE_LENGTH = 20;
+
 async function revealTrivia(trivia) {
   const { bet, participants, answers, question, letters, questionMsg } = trivia;
   const optionsText = question.options.map((opt, i) => `**${letters[i]}.** ${opt}`).join("\n");
@@ -1138,6 +1181,113 @@ async function revealTrivia(trivia) {
     .setTimestamp();
 
   if (questionMsg) await questionMsg.edit({ embeds: [embed], components: [] }).catch(() => {});
+}
+
+// ── Hangman embed ──────────────────────────────────────────
+function buildHangmanEmbed(game) {
+  const display = game.word.split("").map(ch => game.guessed.has(ch) ? ch.toUpperCase() : "_").join(" ");
+  const wrong = game.wrongGuesses.length;
+  const wrongText = wrong > 0 ? game.wrongGuesses.map(l => l.toUpperCase()).join("  ") : "None";
+  const color = wrong >= 6 ? 0xe74c3c : wrong >= 4 ? 0xe67e22 : 0x3498db;
+  return new EmbedBuilder()
+    .setTitle("🪦  Hangman")
+    .setDescription(
+      `${HANGMAN_STAGES[wrong]}\n` +
+      `**Word:** \`${display}\`  (${game.word.length} letters)\n\n` +
+      `❌ **Wrong (${wrong}/6):** ${wrongText}`
+    )
+    .setColor(color)
+    .setFooter({ text: `!guess <letter>  or  !guess <word>${game.bet > 0 ? ` · Pot: ${(game.bet * 2).toLocaleString()} 🐱` : ""}` })
+    .setTimestamp();
+}
+
+// ── Horse race embeds ──────────────────────────────────────
+function buildHorseRaceBettingEmbed(race) {
+  const horseList = RACE_HORSES.map(h =>
+    `**${h.id}.** ${h.emoji} ${h.name} — **${h.odds}x**`
+  ).join("\n");
+  const betList = race.bets.size > 0
+    ? [...race.bets.values()].map(b => {
+        const h = RACE_HORSES[b.horseId - 1];
+        return `• ${b.userName} → ${h.emoji} ${h.name} (${b.bet.toLocaleString()} 🐱)`;
+      }).join("\n")
+    : "*No bets yet*";
+  return new EmbedBuilder()
+    .setTitle("🏇  Horse Race — Place Your Bets!")
+    .setDescription(`${horseList}\n\n**Current bets:**\n${betList}`)
+    .setColor(0xf39c12)
+    .setFooter({ text: "!horse <1-5> <bet> to place · Race starts in 30 seconds · Max 500 🐱 per bet" })
+    .setTimestamp();
+}
+
+function buildHorseRaceTrackEmbed(positions, winner) {
+  const BARS = 14;
+  const lines = RACE_HORSES.map((h, i) => {
+    const pct = Math.min(1, positions[i] / HORSE_RACE_LENGTH);
+    const filled = Math.round(pct * BARS);
+    const bar = "█".repeat(filled) + "░".repeat(BARS - filled);
+    const flag = winner?.id === h.id ? " 🏆" : "";
+    return `${h.emoji} **${h.name}**  (${h.odds}x)\n\`[${bar}]\`${flag}`;
+  });
+  return new EmbedBuilder()
+    .setTitle(winner ? `🏇  Race Over — ${winner.emoji} ${winner.name} Wins!` : "🏇  Horse Race — LIVE!")
+    .setDescription(lines.join("\n\n"))
+    .setColor(winner ? 0x2ecc71 : 0xf39c12)
+    .setTimestamp();
+}
+
+async function runHorseRace(channelId, channel, bettingMsg) {
+  const race = activeHorseRaces.get(channelId);
+  if (!race) return;
+  race.phase = "racing";
+
+  const positions = [0, 0, 0, 0, 0];
+  const raceMsg = await channel.send({ embeds: [buildHorseRaceTrackEmbed(positions, null)] });
+
+  let winner = null;
+  for (let tick = 0; tick < 14 && !winner; tick++) {
+    await new Promise(r => setTimeout(r, 1800));
+    for (let i = 0; i < RACE_HORSES.length; i++) {
+      positions[i] = Math.min(HORSE_RACE_LENGTH, positions[i] + Math.random() * RACE_HORSES[i].maxStep);
+    }
+    if (positions.some(p => p >= HORSE_RACE_LENGTH)) {
+      const maxPos = Math.max(...positions);
+      winner = RACE_HORSES[positions.indexOf(maxPos)];
+    }
+    await raceMsg.edit({ embeds: [buildHorseRaceTrackEmbed(positions, winner)] }).catch(() => {});
+  }
+
+  if (!winner) {
+    const maxPos = Math.max(...positions);
+    winner = RACE_HORSES[positions.indexOf(maxPos)];
+    await raceMsg.edit({ embeds: [buildHorseRaceTrackEmbed(positions, winner)] }).catch(() => {});
+  }
+
+  activeHorseRaces.delete(channelId);
+
+  const winLines = [];
+  const loseLines = [];
+  for (const [uid, { horseId, bet, userName: bName }] of race.bets) {
+    const h = RACE_HORSES[horseId - 1];
+    if (horseId === winner.id) {
+      const payout = Math.floor(bet * winner.odds);
+      addKittens(uid, payout);
+      winLines.push(`🏆 **${bName}** bet **${bet.toLocaleString()} 🐱** → wins **${payout.toLocaleString()} 🐱** (${winner.odds}x)`);
+    } else {
+      loseLines.push(`💸 **${bName}** bet on ${h.emoji} ${h.name} — loses **${bet.toLocaleString()} 🐱**`);
+    }
+  }
+
+  const resultEmbed = new EmbedBuilder()
+    .setTitle(`🏇  Race Results — ${winner.emoji} ${winner.name} wins!`)
+    .setDescription(
+      (winLines.length ? `**Winners:**\n${winLines.join("\n")}` : "**No one bet on the winner!**") +
+      (loseLines.length ? `\n\n**Losers:**\n${loseLines.join("\n")}` : "")
+    )
+    .setColor(0x2ecc71)
+    .setFooter({ text: `Odds were ${winner.odds}x` })
+    .setTimestamp();
+  await channel.send({ embeds: [resultEmbed] });
 }
 
 // ── Bot client ─────────────────────────────────────────────
@@ -2374,6 +2524,8 @@ client.on("messageCreate", async (msg) => {
         { name: "`!crash <bet>`", value: "Bet kittens on a growing multiplier — cash out before it crashes! Others can join with the same bet. (3% house edge, max 2,000 🐱)" },
         { name: "`!heist <bet>`", value: "Recruit a crew and rob a rich user — 10% + 10% per member success chance (max 80%). Richer targets are more likely to be chosen. Others join with the same command. (max 1,000 🐱 ante)" },
         { name: "`!russian <bet>`", value: "Russian roulette — 1 in 6 chance the gun fires on you. Survivors split the dead players' bets. Type to join others. (max 1,500 🐱)" },
+        { name: "`!hangman [bet]`", value: "Start a hangman game — anyone guesses with `!guess <letter>` or `!guess <word>`. 6 wrong guesses = game over. Bet up to 500 🐱 (starter wins 2× if solved, loses if hanged)" },
+        { name: "`!horse` / `!horse <1–5> <bet>`", value: "Horse racing! View the 5 horses and their odds, then bet with `!horse <number> <amount>`. Others can join the 30-second betting window. Winner takes bet × odds. (max 500 🐱 per bet)" },
       )
       .setColor(0xf1c40f)
       .setFooter({ text: "5% daily tax at 2 PM PST — poorest players have the best odds of winning the pot" });
@@ -3035,6 +3187,169 @@ client.on("messageCreate", async (msg) => {
         .setFooter({ text: "Come back tomorrow for another!" })
         .setTimestamp()],
     });
+  }
+
+  // ── !hangman ───────────────────────────────────────────────
+  else if (cmd === "hangman") {
+    ensureUser(userId, userName);
+    const channelId = msg.channel.id;
+    if (activeHangman.has(channelId)) return msg.reply("❌ A hangman game is already running in this channel!");
+
+    const bet = args[0] ? parseInt(args[0]) : 0;
+    if (args[0] && (isNaN(bet) || bet <= 0)) return msg.reply("Usage: `!hangman [bet]`");
+    if (bet > 500) return msg.reply("❌ Max hangman bet is **500 🐱 kittens**!");
+    if (bet > 0) {
+      const bal = getKittens(userId);
+      if (bal < bet) return msg.reply(`❌ You only have **${bal.toLocaleString()} 🐱 kittens**!`);
+      removeKittens(userId, bet);
+    }
+
+    const word = HANGMAN_WORDS[Math.floor(Math.random() * HANGMAN_WORDS.length)];
+    const game = { word, guessed: new Set(), wrongGuesses: [], bet, starterId: userId, starterName: userName, timeoutHandle: null };
+    activeHangman.set(channelId, game);
+
+    const header = bet > 0
+      ? `🪦 **${userName}** started hangman with a **${bet.toLocaleString()} 🐱** bet! Solve it to win **${(bet * 2).toLocaleString()} 🐱**!`
+      : `🪦 **${userName}** started a hangman game! Anyone can guess.`;
+    await msg.channel.send({ content: header, embeds: [buildHangmanEmbed(game)] });
+
+    game.timeoutHandle = setTimeout(async () => {
+      if (!activeHangman.has(channelId)) return;
+      activeHangman.delete(channelId);
+      await msg.channel.send(`⏰ Hangman timed out! The word was **${word.toUpperCase()}**.${bet > 0 ? ` **${userName}** loses **${bet.toLocaleString()} 🐱 kittens**!` : ""}`);
+    }, 5 * 60 * 1000);
+  }
+
+  // ── !guess ─────────────────────────────────────────────────
+  else if (cmd === "guess") {
+    const channelId = msg.channel.id;
+    const game = activeHangman.get(channelId);
+    if (!game) return;
+
+    const input = args[0]?.toLowerCase();
+    if (!input) return msg.reply("Usage: `!guess <letter>` or `!guess <word>`");
+
+    if (input.length > 1) {
+      // Full word guess
+      if (input === game.word) {
+        clearTimeout(game.timeoutHandle);
+        activeHangman.delete(channelId);
+        if (game.bet > 0) addKittens(game.starterId, game.bet * 2);
+        return msg.channel.send({ embeds: [new EmbedBuilder()
+          .setTitle("🎉  Hangman — Solved!")
+          .setDescription(
+            `**${userName}** guessed the word: **${game.word.toUpperCase()}**!\n` +
+            (game.bet > 0 ? `\n**${game.starterName}** wins **${(game.bet * 2).toLocaleString()} 🐱 kittens**!` : "")
+          )
+          .setColor(0x2ecc71).setTimestamp()] });
+      } else {
+        game.wrongGuesses.push(`[${input}]`);
+        if (game.wrongGuesses.length >= 6) {
+          clearTimeout(game.timeoutHandle);
+          activeHangman.delete(channelId);
+          return msg.channel.send({ embeds: [new EmbedBuilder()
+            .setTitle("💀  Hangman — Game Over!")
+            .setDescription(
+              `**${userName}** guessed \`${input}\` — wrong!\n\nThe word was **${game.word.toUpperCase()}**.` +
+              (game.bet > 0 ? `\n\n**${game.starterName}** loses **${game.bet.toLocaleString()} 🐱 kittens** to the house!` : "")
+            )
+            .setColor(0xe74c3c).setTimestamp()] });
+        }
+        return msg.channel.send({ content: `❌ **${userName}** guessed \`${input}\` — wrong word!`, embeds: [buildHangmanEmbed(game)] });
+      }
+    }
+
+    // Single letter
+    if (!/^[a-z]$/.test(input)) return msg.reply("❌ Guess a single letter or the full word.");
+    if (game.guessed.has(input)) return msg.reply(`❌ **${input.toUpperCase()}** was already guessed!`);
+    game.guessed.add(input);
+
+    if (game.word.includes(input)) {
+      const solved = game.word.split("").every(ch => game.guessed.has(ch));
+      if (solved) {
+        clearTimeout(game.timeoutHandle);
+        activeHangman.delete(channelId);
+        if (game.bet > 0) addKittens(game.starterId, game.bet * 2);
+        return msg.channel.send({ embeds: [new EmbedBuilder()
+          .setTitle("🎉  Hangman — Solved!")
+          .setDescription(
+            `**${userName}** found the last letter **${input.toUpperCase()}** — word is **${game.word.toUpperCase()}**!` +
+            (game.bet > 0 ? `\n\n**${game.starterName}** wins **${(game.bet * 2).toLocaleString()} 🐱 kittens**!` : "")
+          )
+          .setColor(0x2ecc71).setTimestamp()] });
+      }
+      return msg.channel.send({ content: `✅ **${userName}** found **${input.toUpperCase()}**!`, embeds: [buildHangmanEmbed(game)] });
+    } else {
+      game.wrongGuesses.push(input);
+      if (game.wrongGuesses.length >= 6) {
+        clearTimeout(game.timeoutHandle);
+        activeHangman.delete(channelId);
+        return msg.channel.send({ embeds: [new EmbedBuilder()
+          .setTitle("💀  Hangman — Game Over!")
+          .setDescription(
+            `**${userName}** guessed **${input.toUpperCase()}** — not in the word!\n\nThe word was **${game.word.toUpperCase()}**.` +
+            (game.bet > 0 ? `\n\n**${game.starterName}** loses **${game.bet.toLocaleString()} 🐱 kittens** to the house!` : "")
+          )
+          .setColor(0xe74c3c).setTimestamp()] });
+      }
+      return msg.channel.send({ content: `❌ **${userName}** guessed **${input.toUpperCase()}** — not in the word!`, embeds: [buildHangmanEmbed(game)] });
+    }
+  }
+
+  // ── !horse ─────────────────────────────────────────────────
+  else if (cmd === "horse") {
+    ensureUser(userId, userName);
+    const channelId = msg.channel.id;
+    const existing = activeHorseRaces.get(channelId);
+
+    // No args → show horses (and current bets if race is open)
+    if (!args[0] || isNaN(parseInt(args[0]))) {
+      if (existing && existing.phase === "betting") {
+        return msg.channel.send({ embeds: [buildHorseRaceBettingEmbed(existing)] });
+      }
+      const horseList = RACE_HORSES.map(h => `**${h.id}.** ${h.emoji} ${h.name} — **${h.odds}x**`).join("\n");
+      return msg.channel.send({ embeds: [new EmbedBuilder()
+        .setTitle("🏇  Horse Racing")
+        .setDescription(`${horseList}\n\nBet with \`!horse <1–5> <amount>\` to start or join a race!`)
+        .setColor(0xf39c12)
+        .setFooter({ text: "Max 500 🐱 per bet · Betting window is 30 seconds after the first bet" })
+        .setTimestamp()] });
+    }
+
+    const horseId = parseInt(args[0]);
+    const bet = parseInt(args[1]);
+    if (horseId < 1 || horseId > 5 || isNaN(horseId)) return msg.reply("❌ Pick a horse number 1–5. Type `!horse` to see the list.");
+    if (isNaN(bet) || bet <= 0) return msg.reply("Usage: `!horse <1–5> <bet>`");
+    if (bet > 500) return msg.reply("❌ Max horse race bet is **500 🐱 kittens**!");
+
+    // Join existing betting phase
+    if (existing && existing.phase === "betting") {
+      if (existing.bets.has(userId)) return msg.reply("❌ You already have a bet in this race!");
+      const bal = getKittens(userId);
+      if (bal < bet) return msg.reply(`❌ You only have **${bal.toLocaleString()} 🐱 kittens**!`);
+      removeKittens(userId, bet);
+      existing.bets.set(userId, { horseId, bet, userName });
+      const h = RACE_HORSES[horseId - 1];
+      await msg.reply(`✅ **${userName}** bets **${bet.toLocaleString()} 🐱** on ${h.emoji} **${h.name}** (${h.odds}x)!`);
+      await existing.bettingMsg?.edit({ embeds: [buildHorseRaceBettingEmbed(existing)] }).catch(() => {});
+      return;
+    }
+
+    if (existing) return msg.reply("❌ A race is already running in this channel!");
+
+    const bal = getKittens(userId);
+    if (bal < bet) return msg.reply(`❌ You only have **${bal.toLocaleString()} 🐱 kittens**!`);
+    removeKittens(userId, bet);
+
+    const race = { phase: "betting", bets: new Map([[userId, { horseId, bet, userName }]]), bettingMsg: null };
+    activeHorseRaces.set(channelId, race);
+
+    const h = RACE_HORSES[horseId - 1];
+    const bettingMsg = await msg.channel.send({ embeds: [buildHorseRaceBettingEmbed(race)] });
+    race.bettingMsg = bettingMsg;
+    await msg.reply(`🏇 **${userName}** bets **${bet.toLocaleString()} 🐱** on ${h.emoji} **${h.name}** (${h.odds}x)! Race starts in **30 seconds** — place your bets!`);
+
+    setTimeout(() => runHorseRace(channelId, msg.channel, bettingMsg), 30_000);
   }
 
   else if (cmd === "cops") {
