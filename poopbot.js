@@ -1115,16 +1115,20 @@ const activeWyrs = new Map();
 const pendingFreakyTouches = new Map(); // revealId → { targetId, message }
 
 const FREAKY_TOUCH_REMARKS = [
-  (s, t) => `**${s}** leaned in real close and whispered something in **${t}**'s ear... 👂`,
-  (s, t) => `**${s}** ran a finger slowly along **${t}**'s arm. 😳`,
-  (s, t) => `**${s}** grabbed **${t}**'s hand and held it just a liiittle too long. 🫦`,
-  (s, t) => `**${s}** reached over and gently tucked a strand of hair behind **${t}**'s ear. 💕`,
-  (s, t) => `**${s}** slipped their hand around **${t}**'s waist. Bold move. 😏`,
-  (s, t) => `**${s}** gave **${t}** a back rub that was NOT requested but also not rejected. 💆`,
-  (s, t) => `**${s}** pressed their forehead against **${t}**'s and stared into their eyes. 🥺`,
-  (s, t) => `**${s}** traced a little heart on **${t}**'s hand. How dare they. 💗`,
-  (s, t) => `**${s}** snuck up and blew softly on **${t}**'s neck. Cold-blooded. 😤`,
-  (s, t) => `**${s}** held **${t}**'s face in their hands and just... looked at them. 😶`,
+  (s, t) => `**${s}**: *nuzzles into **${t}**'s neck* heh... you smell nice uwu 😳`,
+  (s, t) => `**${s}**: *slides hand into **${t}**'s* h-hey... is this ok? 🥺`,
+  (s, t) => `**${s}**: *climbs into **${t}**'s lap uninvited* hi :3`,
+  (s, t) => `**${s}** called **${t}** "baby" in DMs. **${t}** has not responded in 4 hours. 💀`,
+  (s, t) => `**${s}**: *leans head on **${t}**'s shoulder* you're so warm... 😳💕`,
+  (s, t) => `**${s}** sent **${t}** a 3am "u up?" after 6 months of "lol" replies. 😭`,
+  (s, t) => `**${s}** asked **${t}** to be their discord bf/gf. in a server of 200 people. publicly. 💔`,
+  (s, t) => `**${s}**: *traces circles on **${t}**'s hand* hehe you have soft hands :3`,
+  (s, t) => `**${s}** is pinned in **${t}**'s bio. **${t}** did not consent to this. 🫠`,
+  (s, t) => `**${s}**: *pokes **${t}**'s cheek* boop~ noticed you weren't paying attention to me 🥺`,
+  (s, t) => `**${s}** changed their status to "thinking about **${t}**" 💀`,
+  (s, t) => `**${s}**: *sits next to **${t}** on vc* ...hi 🥺 (has not spoken in 2 hours)`,
+  (s, t) => `**${s}** reacted to every single one of **${t}**'s messages with 🥺 tonight.`,
+  (s, t) => `**${s}**: *wraps arms around **${t}** from behind* m-missed you... 😳`,
 ];
 const activeHeists = new Map();
 const activeRussians = new Map();
@@ -3695,26 +3699,47 @@ client.on("messageCreate", async (msg) => {
       `**${senderDisplay}** gave **${targetDisplay}** a firm but loving handshake.`,
     ];
 
-    if (Math.random() < 0.50) {
-      const freakyFn = FREAKY_TOUCH_REMARKS[Math.floor(Math.random() * FREAKY_TOUCH_REMARKS.length)];
-      const freakyMsg = freakyFn(senderDisplay, targetDisplay);
-      const revealId = `${Date.now()}_${userId}`;
-      pendingFreakyTouches.set(revealId, { targetId: target.id, message: freakyMsg });
+    await msg.channel.send(`<@${target.id}> ` + remarks[Math.floor(Math.random() * remarks.length)]);
+  }
 
-      const revealRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`touch_reveal_${revealId}`)
-          .setLabel("👀 Reveal")
-          .setStyle(ButtonStyle.Danger)
-      );
+  // ── !touchf ───────────────────────────────────────────────
+  else if (cmd === "touchf") {
+    let target = msg.mentions.users.first();
 
-      await msg.channel.send({
-        content: `<@${target.id}> ⚠️ **${senderDisplay}** touched you in a *suspicious* way... do you consent to finding out how?`,
-        components: [revealRow],
-      });
-    } else {
-      await msg.channel.send(`<@${target.id}> ` + remarks[Math.floor(Math.random() * remarks.length)]);
+    if (!target) {
+      await msg.guild?.members.fetch().catch(() => {});
+      const role = msg.guild?.roles.cache.find((r) => r.name === EKITTEN_ROLE_NAME);
+      const candidates = role
+        ? [...msg.guild.members.cache.values()].filter(
+            (m) => m.roles.cache.has(role.id) && !m.user.bot && m.id !== userId
+          )
+        : [];
+      if (!candidates.length) return msg.reply("❌ Usage: `!touchf @user`");
+      target = candidates[Math.floor(Math.random() * candidates.length)].user;
     }
+
+    if (target.bot) return msg.reply("❌ The bot has a strict no-touch policy.");
+    if (target.id === userId) return msg.reply("❌ You can't be freaky with yourself. Probably.");
+
+    const senderDisplay = msg.guild?.members.cache.get(userId)?.displayName ?? userName;
+    const targetDisplay = msg.guild?.members.cache.get(target.id)?.displayName ?? target.username;
+
+    const freakyFn = FREAKY_TOUCH_REMARKS[Math.floor(Math.random() * FREAKY_TOUCH_REMARKS.length)];
+    const freakyMsg = freakyFn(senderDisplay, targetDisplay);
+    const revealId = `${Date.now()}_${userId}`;
+    pendingFreakyTouches.set(revealId, { targetId: target.id, message: freakyMsg });
+
+    const revealRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`touch_reveal_${revealId}`)
+        .setLabel("👀 Reveal")
+        .setStyle(ButtonStyle.Danger)
+    );
+
+    await msg.channel.send({
+      content: `<@${target.id}> ⚠️ **${senderDisplay}** touched you in a *suspicious* way... do you consent to finding out how?`,
+      components: [revealRow],
+    });
   }
 });
 
@@ -3767,7 +3792,6 @@ client.on("interactionCreate", async (interaction) => {
   const revealId = customId.slice("touch_reveal_".length);
   const pending = pendingFreakyTouches.get(revealId);
   if (!pending) return interaction.reply({ content: "❌ This touch has expired.", ephemeral: true });
-  if (user.id !== pending.targetId) return interaction.reply({ content: "❌ This touch wasn't meant for you.", ephemeral: true });
 
   pendingFreakyTouches.delete(revealId);
   await interaction.update({ content: pending.message, components: [] });
