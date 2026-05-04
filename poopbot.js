@@ -1110,6 +1110,7 @@ const WYR_QUESTIONS = [
 // ── Per-channel game state ─────────────────────────────────
 const activeCrashes = new Map();
 const activeWyrs = new Map();
+const activeHearmeouts = new Map();
 
 // ── Touch: freaky reveal state ─────────────────────────────
 const pendingFreakyTouches = new Map(); // revealId → { targetId, message }
@@ -2605,6 +2606,7 @@ client.on("messageCreate", async (msg) => {
         { name: "`!kittens` / `!bal`", value: "Check your kitten balance (or `!kittens @user`)" },
         { name: "`!kittenboard` / `!kb`", value: "Kitten rich list" },
         { name: "`!wyr`", value: "Post a 'Would You Rather' poll — vote with buttons, results revealed after 30 seconds" },
+        { name: "`!hearmeout <take>`", value: "Submit an anonymous take — others vote 👍 or 👎 for 5 minutes, then the submitter is revealed · 15 🐱 per 👍 earned" },
         { name: "`!race`", value: "Start a type race — 30s to join with `!join`" },
         { name: "`!blackjack [open / @users] <bet>`", value: "Play vs the dealer · challenge others directly · or open a public table (anyone `!join`s within 30s) — Hit / Stand buttons appear during your turn" },
         { name: "`!slots <bet>`", value: "Spin the slot machine — match symbols to win big, 💩💩💩 pays 50×" },
@@ -3109,6 +3111,62 @@ client.on("messageCreate", async (msg) => {
       activeWyrs.delete(msg.channel.id);
       await sentMsg.edit({ embeds: [buildWyrEmbed(true)], components: [] }).catch(() => {});
     }, 30_000);
+  }
+
+  // ── !hearmeout ────────────────────────────────────────────
+  else if (cmd === "hearmeout") {
+    const statement = args.join(" ").trim();
+    if (!statement) return msg.reply("Usage: `!hearmeout <your take>`  *(stays anonymous for 5 minutes)*");
+    if (activeHearmeouts.has(msg.channel.id)) return msg.reply("❌ A hearmeout is already running in this channel!");
+
+    ensureUser(userId, userName);
+    const votes = { up: new Set(), down: new Set() };
+
+    const buildHmoEmbed = (revealed = false) => {
+      const upCount = votes.up.size;
+      const downCount = votes.down.size;
+      const total = upCount + downCount;
+      let desc = `> ${statement}`;
+      if (revealed && total > 0) {
+        const upBar = Math.round((upCount / total) * 10);
+        const downBar = Math.round((downCount / total) * 10);
+        desc += `\n\n👍 ${"█".repeat(upBar)}${"░".repeat(10 - upBar)} ${upCount}\n👎 ${"█".repeat(downBar)}${"░".repeat(10 - downBar)} ${downCount}`;
+      } else if (revealed) {
+        desc += "\n\n*No votes were cast!*";
+      }
+      return new EmbedBuilder()
+        .setTitle("🎂  Hear Me Out")
+        .setDescription(desc)
+        .setColor(revealed ? 0xff69b4 : 0x9b59b6)
+        .setFooter({ text: revealed ? `Submitted by ${userName} · ${upCount} 👍 ${downCount} 👎` : "Anonymous · Vote with 👍 or 👎 below · Submitter revealed in 5 minutes" })
+        .setTimestamp();
+    };
+
+    const hmoRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`hmo_up_${msg.channel.id}`).setLabel("👍").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`hmo_down_${msg.channel.id}`).setLabel("👎").setStyle(ButtonStyle.Danger),
+    );
+
+    const sentMsg = await msg.channel.send({ embeds: [buildHmoEmbed()], components: [hmoRow] });
+    activeHearmeouts.set(msg.channel.id, { userId, userName, votes, buildHmoEmbed });
+
+    setTimeout(async () => {
+      const hmo = activeHearmeouts.get(msg.channel.id);
+      activeHearmeouts.delete(msg.channel.id);
+      if (!hmo) return;
+
+      const upCount = hmo.votes.up.size;
+      const kittensEarned = upCount * 15;
+      if (kittensEarned > 0) addKittens(hmo.userId, kittensEarned);
+      saveData(db);
+
+      await sentMsg.edit({ embeds: [hmo.buildHmoEmbed(true)], components: [] }).catch(() => {});
+      if (kittensEarned > 0) {
+        await msg.channel.send(`🎂 **${hmo.userName}** earned **${kittensEarned} 🐱 kittens** from their hearmeout! (${upCount} 👍)`);
+      } else {
+        await msg.channel.send(`🎂 **${hmo.userName}**'s hearmeout got no 👍... tough crowd.`);
+      }
+    }, 5 * 60 * 1000);
   }
 
   // ── !heist ────────────────────────────────────────────────
@@ -4098,6 +4156,28 @@ client.on("interactionCreate", async (interaction) => {
   await interaction.reply({
     content: `💰 **${user.username}** cashed out at **${game.multiplier.toFixed(2)}x** — won **${winnings.toLocaleString()} 🐱** (+${profit.toLocaleString()} profit)!`,
   });
+});
+
+// ── Hearmeout interactions ─────────────────────────────────
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isButton()) return;
+  const { customId, user } = interaction;
+  if (!customId.startsWith("hmo_up_") && !customId.startsWith("hmo_down_")) return;
+
+  const parts = customId.split("_");
+  const option = parts[1]; // "up" or "down"
+  const channelId = parts[2];
+
+  const hmo = activeHearmeouts.get(channelId);
+  if (!hmo) return interaction.reply({ content: "❌ This hearmeout has already ended!", ephemeral: true });
+  if (user.id === hmo.userId) return interaction.reply({ content: "❌ You can't vote on your own hearmeout!", ephemeral: true });
+  if (hmo.votes.up.has(user.id) || hmo.votes.down.has(user.id)) {
+    return interaction.reply({ content: "❌ You already voted!", ephemeral: true });
+  }
+
+  hmo.votes[option].add(user.id);
+  const total = hmo.votes.up.size + hmo.votes.down.size;
+  await interaction.reply({ content: `✅ Vote locked in! (${total} total so far)`, ephemeral: true });
 });
 
 // ── WYR interactions ───────────────────────────────────────
