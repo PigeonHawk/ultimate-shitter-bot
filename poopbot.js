@@ -3793,6 +3793,8 @@ client.on("interactionCreate", async (interaction) => {
   const pending = pendingFreakyTouches.get(revealId);
   if (!pending) return interaction.reply({ content: "❌ This touch has expired.", ephemeral: true });
 
+  if (user.id !== pending.targetId) return interaction.reply({ content: "❌ Only the person who was touched can consent!", ephemeral: true });
+
   pendingFreakyTouches.delete(revealId);
   await interaction.update({ content: pending.message, components: [] });
 });
