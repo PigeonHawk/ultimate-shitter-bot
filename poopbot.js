@@ -1600,10 +1600,11 @@ async function runHearmeout(channel, { userId, userName, statement, imageFile })
   const hmoRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`hmo_up_${channel.id}`).setLabel("👍").setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId(`hmo_down_${channel.id}`).setLabel("👎").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(`hmo_cancel_${channel.id}`).setLabel("⏭ End Early").setStyle(ButtonStyle.Secondary),
   );
 
   const sentMsg = await channel.send({ embeds: [buildHmoEmbed()], components: [hmoRow], files: imageFile ? [imageFile] : [] });
-  activeHearmeouts.set(channel.id, { userId, userName, votes, buildHmoEmbed });
+  activeHearmeouts.set(channel.id, { userId, userName, votes, buildHmoEmbed, sentMsg });
 
   setTimeout(async () => {
     const hmo = activeHearmeouts.get(channel.id);
@@ -3203,7 +3204,7 @@ client.on("messageCreate", async (msg) => {
       if (!hearmeoutQueues.has(msg.channel.id)) hearmeoutQueues.set(msg.channel.id, []);
       hearmeoutQueues.get(msg.channel.id).push({ userId, userName, statement, imageFile });
       const pos = hearmeoutQueues.get(msg.channel.id).length;
-      const notice = await msg.channel.send(`🎂 **${userName}**'s hearmeout has been queued (#${pos + 1})!`);
+      const notice = await msg.channel.send(`🎂 Hearmeout queued (#${pos + 1})!`);
       setTimeout(() => notice.delete().catch(() => {}), 5000);
     }
   }
@@ -4201,14 +4202,47 @@ client.on("interactionCreate", async (interaction) => {
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
   const { customId, user } = interaction;
-  if (!customId.startsWith("hmo_up_") && !customId.startsWith("hmo_down_")) return;
+  if (!customId.startsWith("hmo_up_") && !customId.startsWith("hmo_down_") && !customId.startsWith("hmo_cancel_")) return;
 
   const parts = customId.split("_");
-  const option = parts[1]; // "up" or "down"
+  const option = parts[1]; // "up", "down", or "cancel"
   const channelId = parts[2];
 
   const hmo = activeHearmeouts.get(channelId);
   if (!hmo) return interaction.reply({ content: "❌ This hearmeout has already ended!", ephemeral: true });
+
+  if (option === "cancel") {
+    if (user.id !== hmo.userId) return interaction.reply({ content: "❌ Only the person who submitted this hearmeout can end it early!", ephemeral: true });
+
+    activeHearmeouts.delete(channelId);
+    await interaction.deferUpdate();
+
+    const upCount = hmo.votes.up.size;
+    const kittensEarned = upCount * 50;
+    if (kittensEarned > 0) addKittens(hmo.userId, kittensEarned);
+    saveData(db);
+
+    await hmo.sentMsg.edit({ embeds: [hmo.buildHmoEmbed(true)], components: [] }).catch(() => {});
+
+    const upVoters = [...hmo.votes.up].map(id => `<@${id}>`).join(", ") || "*nobody*";
+    const downVoters = [...hmo.votes.down].map(id => `<@${id}>`).join(", ") || "*nobody*";
+    const voterLog = `👍 ${upVoters}\n👎 ${downVoters}`;
+
+    if (kittensEarned > 0) {
+      await interaction.channel.send(`🎂 **${hmo.userName}** ended their hearmeout early and earned **${kittensEarned} 🐱 kittens**! (${upCount} 👍)\n${voterLog}`);
+    } else {
+      await interaction.channel.send(`🎂 **${hmo.userName}** ended their hearmeout early. No 👍... tough crowd.\n${voterLog}`);
+    }
+
+    const queue = hearmeoutQueues.get(channelId);
+    if (queue?.length > 0) {
+      const next = queue.shift();
+      if (queue.length === 0) hearmeoutQueues.delete(channelId);
+      await runHearmeout(interaction.channel, next);
+    }
+    return;
+  }
+
   if (user.id === hmo.userId) return interaction.reply({ content: "❌ You can't vote on your own hearmeout!", ephemeral: true });
   if (hmo.votes.up.has(user.id) || hmo.votes.down.has(user.id)) {
     return interaction.reply({ content: "❌ You already voted!", ephemeral: true });
