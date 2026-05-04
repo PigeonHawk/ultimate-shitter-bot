@@ -2606,7 +2606,7 @@ client.on("messageCreate", async (msg) => {
         { name: "`!kittens` / `!bal`", value: "Check your kitten balance (or `!kittens @user`)" },
         { name: "`!kittenboard` / `!kb`", value: "Kitten rich list" },
         { name: "`!wyr`", value: "Post a 'Would You Rather' poll — vote with buttons, results revealed after 30 seconds" },
-        { name: "`!hearmeout <take>`", value: "Submit an anonymous take — others vote 👍 or 👎 for 5 minutes, then the submitter is revealed · 15 🐱 per 👍 earned" },
+        { name: "`!hearmeout <take>`", value: "Submit an anonymous take (attach an image too!) — others vote 👍 or 👎 for 2 minutes, then the submitter is revealed · 50 🐱 per 👍 earned" },
         { name: "`!race`", value: "Start a type race — 30s to join with `!join`" },
         { name: "`!blackjack [open / @users] <bet>`", value: "Play vs the dealer · challenge others directly · or open a public table (anyone `!join`s within 30s) — Hit / Stand buttons appear during your turn" },
         { name: "`!slots <bet>`", value: "Spin the slot machine — match symbols to win big, 💩💩💩 pays 50×" },
@@ -3116,11 +3116,13 @@ client.on("messageCreate", async (msg) => {
   // ── !hearmeout ────────────────────────────────────────────
   else if (cmd === "hearmeout") {
     const statement = args.join(" ").trim();
-    if (!statement) return msg.reply("Usage: `!hearmeout <your take>`  *(stays anonymous for 5 minutes)*");
+    if (!statement) return msg.reply("Usage: `!hearmeout <your take>`  *(stays anonymous for 2 minutes, attach an image if you want!)*");
     if (activeHearmeouts.has(msg.channel.id)) return msg.reply("❌ A hearmeout is already running in this channel!");
 
     ensureUser(userId, userName);
     const votes = { up: new Set(), down: new Set() };
+    const imageAttachment = msg.attachments.find(a => a.contentType?.startsWith("image/"));
+    const imageUrl = imageAttachment ? imageAttachment.url : null;
 
     const buildHmoEmbed = (revealed = false) => {
       const upCount = votes.up.size;
@@ -3134,12 +3136,14 @@ client.on("messageCreate", async (msg) => {
       } else if (revealed) {
         desc += "\n\n*No votes were cast!*";
       }
-      return new EmbedBuilder()
+      const embed = new EmbedBuilder()
         .setTitle("🎂  Hear Me Out")
         .setDescription(desc)
         .setColor(revealed ? 0xff69b4 : 0x9b59b6)
-        .setFooter({ text: revealed ? `Submitted by ${userName} · ${upCount} 👍 ${downCount} 👎` : "Anonymous · Vote with 👍 or 👎 below · Submitter revealed in 5 minutes" })
+        .setFooter({ text: revealed ? `Submitted by ${userName} · ${upCount} 👍 ${downCount} 👎` : "Anonymous · Vote with 👍 or 👎 below · Submitter revealed in 2 minutes" })
         .setTimestamp();
+      if (imageUrl) embed.setImage(imageUrl);
+      return embed;
     };
 
     const hmoRow = new ActionRowBuilder().addComponents(
@@ -3148,6 +3152,7 @@ client.on("messageCreate", async (msg) => {
     );
 
     const sentMsg = await msg.channel.send({ embeds: [buildHmoEmbed()], components: [hmoRow] });
+    msg.delete().catch(() => {});
     activeHearmeouts.set(msg.channel.id, { userId, userName, votes, buildHmoEmbed });
 
     setTimeout(async () => {
@@ -3156,17 +3161,22 @@ client.on("messageCreate", async (msg) => {
       if (!hmo) return;
 
       const upCount = hmo.votes.up.size;
-      const kittensEarned = upCount * 15;
+      const kittensEarned = upCount * 50;
       if (kittensEarned > 0) addKittens(hmo.userId, kittensEarned);
       saveData(db);
 
       await sentMsg.edit({ embeds: [hmo.buildHmoEmbed(true)], components: [] }).catch(() => {});
+
+      const upVoters = [...hmo.votes.up].map(id => `<@${id}>`).join(", ") || "*nobody*";
+      const downVoters = [...hmo.votes.down].map(id => `<@${id}>`).join(", ") || "*nobody*";
+      const voterLog = `👍 ${upVoters}\n👎 ${downVoters}`;
+
       if (kittensEarned > 0) {
-        await msg.channel.send(`🎂 **${hmo.userName}** earned **${kittensEarned} 🐱 kittens** from their hearmeout! (${upCount} 👍)`);
+        await msg.channel.send(`🎂 **${hmo.userName}** earned **${kittensEarned} 🐱 kittens** from their hearmeout! (${upCount} 👍)\n${voterLog}`);
       } else {
-        await msg.channel.send(`🎂 **${hmo.userName}**'s hearmeout got no 👍... tough crowd.`);
+        await msg.channel.send(`🎂 **${hmo.userName}**'s hearmeout got no 👍... tough crowd.\n${voterLog}`);
       }
-    }, 5 * 60 * 1000);
+    }, 2 * 60 * 1000);
   }
 
   // ── !heist ────────────────────────────────────────────────
