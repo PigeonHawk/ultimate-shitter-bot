@@ -2515,6 +2515,7 @@ client.on("messageCreate", async (msg) => {
         { name: "`!race`", value: "Start a type race — 30s to join with `!join`" },
         { name: "`!blackjack [open / @users] <bet>`", value: "Play vs the dealer · challenge others directly · or open a public table (anyone `!join`s within 30s) — Hit / Stand buttons appear during your turn" },
         { name: "`!slots <bet>`", value: "Spin the slot machine — match symbols to win big, 💩💩💩 pays 50×" },
+        { name: "`!flip <heads|tails> <bet>`", value: "Call heads or tails and bet up to 100 🐱 — win doubles your bet, lose it all" },
         { name: "`!trivia <bet>`", value: "Start a trivia round — 20s for others to `!join`, then a poop-flavored question drops for all players · Correct = 2× bet · Wrong or timeout = lose bet" },
         { name: "`!rps <bet>` / `!rps @user <bet>`", value: "Play Rock Paper Scissors vs the house (win doubles your bet, tie refunds it) — or challenge someone 1v1 (winner takes the other's bet)" },
         { name: "`!rob [@user] <amount> [rps]`", value: "Rob a random user or target a specific one — dice roll (default) or rps · win 1.5× stake · 2 robs/day · 30s to respond" },
@@ -2621,6 +2622,40 @@ client.on("messageCreate", async (msg) => {
       .setColor(color)
       .addFields({ name: userName, value: `${getKittens(userId).toLocaleString()} 🐱`, inline: true })
       .setFooter({ text: "💩=50x · 🐱=15x · 💎=8x · ⭐=4x · 🍒/🔔=3x · 🍋=2x · Two 💩/🐱 = push" })
+      .setTimestamp();
+    await msg.channel.send({ embeds: [embed] });
+  }
+
+  // ── !flip ─────────────────────────────────────────────────
+  else if (cmd === "flip") {
+    const side = args[0]?.toLowerCase();
+    const bet = parseInt(args[1]);
+    if (!["heads", "tails"].includes(side) || isNaN(bet) || bet <= 0)
+      return msg.reply("Usage: `!flip <heads|tails> <bet>`");
+    if (bet > 100) return msg.reply("❌ The maximum coin flip bet is **100 🐱 kittens**!");
+    ensureUser(userId, userName);
+    const userKittens = getKittens(userId);
+    if (userKittens < bet) return msg.reply(`❌ You only have **${userKittens.toLocaleString()} 🐱 kittens**!`);
+
+    const result = Math.random() < 0.5 ? "heads" : "tails";
+    const won = result === side;
+    if (won) {
+      addKittens(userId, bet);
+    } else {
+      removeKittens(userId, bet);
+    }
+
+    const coinDisplay = result === "heads" ? "🟡 **HEADS**" : "⚪ **TAILS**";
+    const embed = new EmbedBuilder()
+      .setTitle(won ? "🪙  Coin Flip — Winner!" : "🪙  Coin Flip — Unlucky")
+      .setDescription(
+        `${coinDisplay}\n\n` +
+        (won
+          ? `🎉 **${userName}** called **${side}** and won **${bet.toLocaleString()} 🐱 kittens**!`
+          : `😔 **${userName}** called **${side}** but it landed on **${result}** — lost **${bet.toLocaleString()} 🐱 kittens**.`)
+      )
+      .setColor(won ? 0x2ecc71 : 0xe74c3c)
+      .addFields({ name: userName, value: `${getKittens(userId).toLocaleString()} 🐱`, inline: true })
       .setTimestamp();
     await msg.channel.send({ embeds: [embed] });
   }
