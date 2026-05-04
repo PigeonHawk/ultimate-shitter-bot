@@ -1110,6 +1110,22 @@ const WYR_QUESTIONS = [
 // ── Per-channel game state ─────────────────────────────────
 const activeCrashes = new Map();
 const activeWyrs = new Map();
+
+// ── Touch: freaky reveal state ─────────────────────────────
+const pendingFreakyTouches = new Map(); // revealId → { targetId, message }
+
+const FREAKY_TOUCH_REMARKS = [
+  (s, t) => `**${s}** leaned in real close and whispered something in **${t}**'s ear... 👂`,
+  (s, t) => `**${s}** ran a finger slowly along **${t}**'s arm. 😳`,
+  (s, t) => `**${s}** grabbed **${t}**'s hand and held it just a liiittle too long. 🫦`,
+  (s, t) => `**${s}** reached over and gently tucked a strand of hair behind **${t}**'s ear. 💕`,
+  (s, t) => `**${s}** slipped their hand around **${t}**'s waist. Bold move. 😏`,
+  (s, t) => `**${s}** gave **${t}** a back rub that was NOT requested but also not rejected. 💆`,
+  (s, t) => `**${s}** pressed their forehead against **${t}**'s and stared into their eyes. 🥺`,
+  (s, t) => `**${s}** traced a little heart on **${t}**'s hand. How dare they. 💗`,
+  (s, t) => `**${s}** snuck up and blew softly on **${t}**'s neck. Cold-blooded. 😤`,
+  (s, t) => `**${s}** held **${t}**'s face in their hands and just... looked at them. 😶`,
+];
 const activeHeists = new Map();
 const activeRussians = new Map();
 
@@ -3679,7 +3695,26 @@ client.on("messageCreate", async (msg) => {
       `**${senderDisplay}** gave **${targetDisplay}** a firm but loving handshake.`,
     ];
 
-    await msg.channel.send(`<@${target.id}> ` + remarks[Math.floor(Math.random() * remarks.length)]);
+    if (Math.random() < 0.50) {
+      const freakyFn = FREAKY_TOUCH_REMARKS[Math.floor(Math.random() * FREAKY_TOUCH_REMARKS.length)];
+      const freakyMsg = freakyFn(senderDisplay, targetDisplay);
+      const revealId = `${Date.now()}_${userId}`;
+      pendingFreakyTouches.set(revealId, { targetId: target.id, message: freakyMsg });
+
+      const revealRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`touch_reveal_${revealId}`)
+          .setLabel("👀 Reveal")
+          .setStyle(ButtonStyle.Danger)
+      );
+
+      await msg.channel.send({
+        content: `<@${target.id}> ⚠️ **${senderDisplay}** touched you in a *suspicious* way... do you consent to finding out how?`,
+        components: [revealRow],
+      });
+    } else {
+      await msg.channel.send(`<@${target.id}> ` + remarks[Math.floor(Math.random() * remarks.length)]);
+    }
   }
 });
 
@@ -3721,6 +3756,21 @@ client.on("interactionCreate", async (interaction) => {
     await channel.send(`🛑 **${name}** stands at **${handValue(game.hands[game.turn])}**.`);
     advanceTurn(channel, channelId);
   }
+});
+
+// ── Touch reveal interactions ──────────────────────────────
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isButton()) return;
+  const { customId, user } = interaction;
+  if (!customId.startsWith("touch_reveal_")) return;
+
+  const revealId = customId.slice("touch_reveal_".length);
+  const pending = pendingFreakyTouches.get(revealId);
+  if (!pending) return interaction.reply({ content: "❌ This touch has expired.", ephemeral: true });
+  if (user.id !== pending.targetId) return interaction.reply({ content: "❌ This touch wasn't meant for you.", ephemeral: true });
+
+  pendingFreakyTouches.delete(revealId);
+  await interaction.update({ content: pending.message, components: [] });
 });
 
 // ── RPS interactions ───────────────────────────────────────
