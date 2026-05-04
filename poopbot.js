@@ -3627,6 +3627,47 @@ client.on("messageCreate", async (msg) => {
       await msg.channel.send({ embeds: [missEmbed] });
     }
   }
+
+  // ── !touch ────────────────────────────────────────────────
+  else if (cmd === "touch") {
+    const target = msg.mentions.users.first();
+    if (!target) return msg.reply("❌ Usage: `!touch @user`");
+    if (target.bot) return msg.reply("❌ The bot has a strict no-touch policy.");
+
+    const senderDisplay = msg.guild?.members.cache.get(userId)?.displayName ?? userName;
+    const targetDisplay = msg.guild?.members.cache.get(target.id)?.displayName ?? target.username;
+
+    if (target.id === userId) {
+      const selfRemarks = [
+        `**${senderDisplay}** touched themselves. No comment.`,
+        `**${senderDisplay}** touched themselves and immediately felt shame.`,
+        `**${senderDisplay}** touched themselves. The server watched in silence.`,
+        `**${senderDisplay}** reached out... and touched themselves. Bold.`,
+        `**${senderDisplay}** touched themselves. Everyone pretended not to see.`,
+      ];
+      return msg.channel.send(selfRemarks[Math.floor(Math.random() * selfRemarks.length)]);
+    }
+
+    const remarks = [
+      `**${senderDisplay}** poked **${targetDisplay}**. **${targetDisplay}** did not consent but also did not resist.`,
+      `**${senderDisplay}** touched **${targetDisplay}**. A single tear rolled down **${targetDisplay}**'s cheek.`,
+      `**${senderDisplay}** reached out and touched **${targetDisplay}**. The physical contact was noted and logged.`,
+      `**${senderDisplay}** touched **${targetDisplay}** with one finger. **${targetDisplay}** is now legally tainted.`,
+      `**${senderDisplay}** touched **${targetDisplay}**. **${targetDisplay}**'s skin crawled but they said nothing.`,
+      `**${senderDisplay}** made physical contact with **${targetDisplay}**. Both parties are changed forever.`,
+      `**${senderDisplay}** touched **${targetDisplay}**. It felt exactly as weird as expected.`,
+      `**${senderDisplay}** poked **${targetDisplay}** in the side. **${targetDisplay}** pretended not to feel it.`,
+      `**${senderDisplay}** touched **${targetDisplay}**. **${targetDisplay}** stared straight ahead and dissociated.`,
+      `**${senderDisplay}** reached out and touched **${targetDisplay}**. Society crumbled slightly.`,
+      `**${senderDisplay}** touched **${targetDisplay}**. **${targetDisplay}** filed a mental report.`,
+      `**${senderDisplay}** touched **${targetDisplay}** on the shoulder. Neither spoke of it again.`,
+      `**${senderDisplay}** poked **${targetDisplay}**. **${targetDisplay}** considered their life choices.`,
+      `**${senderDisplay}** touched **${targetDisplay}**. Witnesses are already forgetting what they saw.`,
+      `**${senderDisplay}** made contact with **${targetDisplay}**. The touch was wet somehow.`,
+    ];
+
+    await msg.channel.send(`<@${target.id}> ` + remarks[Math.floor(Math.random() * remarks.length)]);
+  }
 });
 
 // ── Blackjack interactions ─────────────────────────────────
