@@ -1298,6 +1298,7 @@ const client = new Client({
 });
 
 let db = loadData();
+if (!db.tag) db.tag = { itUserId: null, itUserName: null };
 
 function runDailyReset() {
   pickTodaysWindows();
@@ -1454,6 +1455,74 @@ async function runDailyTax() {
 
 // 2 pm PST = 22:00 UTC
 cron.schedule("0 22 * * *", () => runDailyTax());
+
+// ── Tag game ───────────────────────────────────────────────
+async function runTagDailyReset() {
+  if (!db.tag) db.tag = { itUserId: null, itUserName: null };
+
+  const loserId = db.tag.itUserId;
+  const loserName = db.tag.itUserName;
+
+  // Penalize whoever was "it" at midnight
+  if (loserId && db.users[loserId]) {
+    db.users[loserId].kittens = Math.max(0, (db.users[loserId].kittens ?? 0) - 100);
+  }
+
+  // Collect all non-bot ekitten members across all guilds
+  const eligible = [];
+  const seen = new Set();
+  for (const guild of client.guilds.cache.values()) {
+    await guild.members.fetch().catch(() => {});
+    const role = guild.roles.cache.find((r) => r.name === EKITTEN_ROLE_NAME);
+    if (!role) continue;
+    guild.members.cache.forEach((member) => {
+      if (member.roles.cache.has(role.id) && !member.user.bot && !seen.has(member.user.id)) {
+        seen.add(member.user.id);
+        eligible.push({ id: member.user.id, name: member.displayName ?? member.user.username });
+      }
+    });
+  }
+
+  if (eligible.length > 0) {
+    const chosen = eligible[Math.floor(Math.random() * eligible.length)];
+    db.tag = { itUserId: chosen.id, itUserName: chosen.name };
+    ensureUser(chosen.id, chosen.name);
+  } else {
+    db.tag = { itUserId: null, itUserName: null };
+  }
+
+  saveData(db);
+
+  // Announce in golden-saucer or general
+  client.guilds.cache.forEach(async (guild) => {
+    const channel = guild.channels.cache.find(
+      (c) => c.type === 0 && (c.name === "🤑golden-saucer" || c.name === "golden-saucer" || c.name === "general")
+    );
+    if (!channel) return;
+
+    let desc = "";
+    if (loserId && loserName) {
+      const loserBal = (db.users[loserId]?.kittens ?? 0).toLocaleString();
+      desc += `😱 **${loserName}** was 'it' at midnight and lost **100 🐱 kittens**! (now ${loserBal} 🐱)\n\n`;
+    }
+    if (db.tag.itUserId) {
+      const member = guild.members.cache.get(db.tag.itUserId);
+      const itName = member?.displayName ?? db.tag.itUserName ?? "Unknown";
+      desc += `🎯 **${itName}** is now 'it'! They can \`!tag @user\` up to **5 times per hour**.\nWhoever is 'it' at midnight tonight loses **100 🐱 kittens**! 🌙`;
+    } else {
+      desc += "No ekitten members found — tag game paused today.";
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle("🏷️  Tag — New Day!")
+      .setDescription(desc)
+      .setColor(0xff6b6b)
+      .setTimestamp();
+    await channel.send({ embeds: [embed] }).catch(() => {});
+  });
+}
+
+cron.schedule("0 0 * * *", () => runTagDailyReset(), { timezone: "America/Los_Angeles" });
 
 // ── VC tracking ────────────────────────────────────────────
 const vcJoinTimes = new Map();
@@ -3465,6 +3534,94 @@ client.on("messageCreate", async (msg) => {
       .setColor(0xf5c518)
       .setFooter({ text: "Use !fortune again for another one" });
     await msg.channel.send({ embeds: [embed] });
+  }
+
+  // ── !tag ──────────────────────────────────────────────────
+  else if (cmd === "tag") {
+    ensureUser(userId, userName);
+
+    // No args — show who's "it"
+    if (!msg.mentions.users.size) {
+      if (!db.tag?.itUserId) {
+        return msg.reply("🏷️ No one is 'it' right now! A new 'it' is chosen daily from ekitten members at midnight PST.");
+      }
+      const itId = db.tag.itUserId;
+      const itName = db.tag.itUserName ?? "Unknown";
+      const bal = getKittens(itId);
+      const statusEmbed = new EmbedBuilder()
+        .setTitle("🏷️  Tag — Who's 'It'?")
+        .setDescription(
+          `**${itName}** is currently 'it'!\n\n` +
+          `They can \`!tag @user\` up to **5 times per hour**.\n` +
+          `Whoever is 'it' at midnight PST loses **100 🐱 kittens**!`
+        )
+        .addFields({ name: itName, value: `${bal.toLocaleString()} 🐱`, inline: true })
+        .setColor(0xff6b6b)
+        .setTimestamp();
+      return msg.channel.send({ embeds: [statusEmbed] });
+    }
+
+    // Must be "it" to tag someone
+    if (!db.tag?.itUserId || db.tag.itUserId !== userId) {
+      const itName = db.tag?.itUserName ?? "someone else";
+      return msg.reply(`❌ You're not 'it'! **${itName}** is currently 'it'.`);
+    }
+
+    const target = msg.mentions.users.first();
+    if (target.id === userId) return msg.reply("❌ You can't tag yourself!");
+    if (target.bot) return msg.reply("❌ You can't tag bots!");
+
+    ensureUser(target.id, target.username);
+
+    // Rate limit: 5 attempts per rolling hour
+    const TAG_WINDOW_MS = 60 * 60 * 1000;
+    const tagger = db.users[userId];
+    const now = Date.now();
+    const windowStart = tagger.tagHourWindowStart ?? 0;
+    const windowActive = now - windowStart < TAG_WINDOW_MS;
+    const attemptsThisHour = windowActive ? (tagger.tagAttemptsThisHour ?? 0) : 0;
+
+    if (attemptsThisHour >= 5) {
+      const secsLeft = Math.ceil((TAG_WINDOW_MS - (now - windowStart)) / 1000);
+      const minsLeft = Math.ceil(secsLeft / 60);
+      return msg.reply(`❌ You've used all 5 tag attempts this hour! Try again in **${minsLeft} minute${minsLeft !== 1 ? "s" : ""}**.`);
+    }
+
+    if (!windowActive) tagger.tagHourWindowStart = now;
+    tagger.tagAttemptsThisHour = attemptsThisHour + 1;
+    const attemptsLeft = 5 - tagger.tagAttemptsThisHour;
+
+    const targetName = msg.guild?.members.cache.get(target.id)?.displayName ?? target.username;
+    const success = Math.random() < 0.5;
+
+    if (success) {
+      db.tag.itUserId = target.id;
+      db.tag.itUserName = targetName;
+      saveData(db);
+      const tagEmbed = new EmbedBuilder()
+        .setTitle("🏷️  TAG!")
+        .setDescription(
+          `**${userName}** tagged **${targetName}**! **${targetName}** is now 'it'! 🎯\n\n` +
+          `Whoever is 'it' at midnight PST loses **100 🐱 kittens**!`
+        )
+        .setColor(0xff6b6b)
+        .addFields({ name: targetName, value: `${getKittens(target.id).toLocaleString()} 🐱`, inline: true })
+        .setFooter({ text: `${userName} has ${attemptsLeft} tag attempt${attemptsLeft !== 1 ? "s" : ""} left this hour` })
+        .setTimestamp();
+      await msg.channel.send({ embeds: [tagEmbed] });
+    } else {
+      saveData(db);
+      const missEmbed = new EmbedBuilder()
+        .setTitle("🏷️  Tag Miss!")
+        .setDescription(
+          `**${userName}** tried to tag **${targetName}** but missed! **${targetName}** dodged! 💨\n\n` +
+          `**${userName}** is still 'it'.`
+        )
+        .setColor(0x95a5a6)
+        .setFooter({ text: `${userName} has ${attemptsLeft} tag attempt${attemptsLeft !== 1 ? "s" : ""} left this hour` })
+        .setTimestamp();
+      await msg.channel.send({ embeds: [missEmbed] });
+    }
   }
 });
 
