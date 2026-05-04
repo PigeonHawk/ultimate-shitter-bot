@@ -13,7 +13,7 @@
 //    - Drag the bot's role ABOVE it in Server Settings > Roles
 // ============================================================
 
-const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require("discord.js");
 const cron = require("node-cron");
 const fs = require("fs");
 
@@ -1111,6 +1111,7 @@ const WYR_QUESTIONS = [
 const activeCrashes = new Map();
 const activeWyrs = new Map();
 const activeHearmeouts = new Map();
+const hearmeoutQueues = new Map(); // channelId → [{ userId, userName, statement, imageFile }]
 
 // ── Touch: freaky reveal state ─────────────────────────────
 const pendingFreakyTouches = new Map(); // revealId → { targetId, message }
@@ -1569,6 +1570,71 @@ client.on("voiceStateUpdate", (oldState, newState) => {
     }
   }
 });
+
+// ── Hearmeout runner (handles queue) ───────────────────────
+async function runHearmeout(channel, { userId, userName, statement, imageFile }) {
+  const votes = { up: new Set(), down: new Set() };
+
+  const buildHmoEmbed = (revealed = false) => {
+    const upCount = votes.up.size;
+    const downCount = votes.down.size;
+    const total = upCount + downCount;
+    let desc = `> ${statement}`;
+    if (revealed && total > 0) {
+      const upBar = Math.round((upCount / total) * 10);
+      const downBar = Math.round((downCount / total) * 10);
+      desc += `\n\n👍 ${"█".repeat(upBar)}${"░".repeat(10 - upBar)} ${upCount}\n👎 ${"█".repeat(downBar)}${"░".repeat(10 - downBar)} ${downCount}`;
+    } else if (revealed) {
+      desc += "\n\n*No votes were cast!*";
+    }
+    const embed = new EmbedBuilder()
+      .setTitle("🎂  Hear Me Out")
+      .setDescription(desc)
+      .setColor(revealed ? 0xff69b4 : 0x9b59b6)
+      .setFooter({ text: revealed ? `Submitted by ${userName} · ${upCount} 👍 ${downCount} 👎` : "Anonymous · Vote with 👍 or 👎 below · Submitter revealed in 1 minute" })
+      .setTimestamp();
+    if (imageFile) embed.setImage(`attachment://${imageFile.name}`);
+    return embed;
+  };
+
+  const hmoRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`hmo_up_${channel.id}`).setLabel("👍").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`hmo_down_${channel.id}`).setLabel("👎").setStyle(ButtonStyle.Danger),
+  );
+
+  const sentMsg = await channel.send({ embeds: [buildHmoEmbed()], components: [hmoRow], files: imageFile ? [imageFile] : [] });
+  activeHearmeouts.set(channel.id, { userId, userName, votes, buildHmoEmbed });
+
+  setTimeout(async () => {
+    const hmo = activeHearmeouts.get(channel.id);
+    activeHearmeouts.delete(channel.id);
+    if (!hmo) return;
+
+    const upCount = hmo.votes.up.size;
+    const kittensEarned = upCount * 50;
+    if (kittensEarned > 0) addKittens(hmo.userId, kittensEarned);
+    saveData(db);
+
+    await sentMsg.edit({ embeds: [hmo.buildHmoEmbed(true)], components: [] }).catch(() => {});
+
+    const upVoters = [...hmo.votes.up].map(id => `<@${id}>`).join(", ") || "*nobody*";
+    const downVoters = [...hmo.votes.down].map(id => `<@${id}>`).join(", ") || "*nobody*";
+    const voterLog = `👍 ${upVoters}\n👎 ${downVoters}`;
+
+    if (kittensEarned > 0) {
+      await channel.send(`🎂 **${hmo.userName}** earned **${kittensEarned} 🐱 kittens** from their hearmeout! (${upCount} 👍)\n${voterLog}`);
+    } else {
+      await channel.send(`🎂 **${hmo.userName}**'s hearmeout got no 👍... tough crowd.\n${voterLog}`);
+    }
+
+    const queue = hearmeoutQueues.get(channel.id);
+    if (queue?.length > 0) {
+      const next = queue.shift();
+      if (queue.length === 0) hearmeoutQueues.delete(channel.id);
+      await runHearmeout(channel, next);
+    }
+  }, 60_000);
+}
 
 // ── Message handler ────────────────────────────────────────
 client.on("messageCreate", async (msg) => {
@@ -2606,7 +2672,7 @@ client.on("messageCreate", async (msg) => {
         { name: "`!kittens` / `!bal`", value: "Check your kitten balance (or `!kittens @user`)" },
         { name: "`!kittenboard` / `!kb`", value: "Kitten rich list" },
         { name: "`!wyr`", value: "Post a 'Would You Rather' poll — vote with buttons, results revealed after 30 seconds" },
-        { name: "`!hearmeout <take>`", value: "Submit an anonymous take (attach an image too!) — others vote 👍 or 👎 for 2 minutes, then the submitter is revealed · 50 🐱 per 👍 earned" },
+        { name: "`!hearmeout <take>`", value: "Submit an anonymous take (attach an image too!) — others vote 👍 or 👎 for 1 minute, then the submitter is revealed · 50 🐱 per 👍 earned · queues automatically if one is running" },
         { name: "`!race`", value: "Start a type race — 30s to join with `!join`" },
         { name: "`!blackjack [open / @users] <bet>`", value: "Play vs the dealer · challenge others directly · or open a public table (anyone `!join`s within 30s) — Hit / Stand buttons appear during your turn" },
         { name: "`!slots <bet>`", value: "Spin the slot machine — match symbols to win big, 💩💩💩 pays 50×" },
@@ -3116,67 +3182,30 @@ client.on("messageCreate", async (msg) => {
   // ── !hearmeout ────────────────────────────────────────────
   else if (cmd === "hearmeout") {
     const statement = args.join(" ").trim();
-    if (!statement) return msg.reply("Usage: `!hearmeout <your take>`  *(stays anonymous for 2 minutes, attach an image if you want!)*");
-    if (activeHearmeouts.has(msg.channel.id)) return msg.reply("❌ A hearmeout is already running in this channel!");
+    if (!statement) return msg.reply("Usage: `!hearmeout <your take>`  *(stays anonymous for 1 minute, attach an image if you want!)*");
 
     ensureUser(userId, userName);
-    const votes = { up: new Set(), down: new Set() };
+
     const imageAttachment = msg.attachments.find(a => a.contentType?.startsWith("image/"));
-    const imageUrl = imageAttachment ? imageAttachment.url : null;
+    let imageFile = null;
+    if (imageAttachment) {
+      const res = await fetch(imageAttachment.url);
+      const buf = Buffer.from(await res.arrayBuffer());
+      const ext = imageAttachment.name?.split(".").pop() || "png";
+      imageFile = new AttachmentBuilder(buf, { name: `hmo_image.${ext}` });
+    }
 
-    const buildHmoEmbed = (revealed = false) => {
-      const upCount = votes.up.size;
-      const downCount = votes.down.size;
-      const total = upCount + downCount;
-      let desc = `> ${statement}`;
-      if (revealed && total > 0) {
-        const upBar = Math.round((upCount / total) * 10);
-        const downBar = Math.round((downCount / total) * 10);
-        desc += `\n\n👍 ${"█".repeat(upBar)}${"░".repeat(10 - upBar)} ${upCount}\n👎 ${"█".repeat(downBar)}${"░".repeat(10 - downBar)} ${downCount}`;
-      } else if (revealed) {
-        desc += "\n\n*No votes were cast!*";
-      }
-      const embed = new EmbedBuilder()
-        .setTitle("🎂  Hear Me Out")
-        .setDescription(desc)
-        .setColor(revealed ? 0xff69b4 : 0x9b59b6)
-        .setFooter({ text: revealed ? `Submitted by ${userName} · ${upCount} 👍 ${downCount} 👎` : "Anonymous · Vote with 👍 or 👎 below · Submitter revealed in 2 minutes" })
-        .setTimestamp();
-      if (imageUrl) embed.setImage(imageUrl);
-      return embed;
-    };
-
-    const hmoRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`hmo_up_${msg.channel.id}`).setLabel("👍").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId(`hmo_down_${msg.channel.id}`).setLabel("👎").setStyle(ButtonStyle.Danger),
-    );
-
-    const sentMsg = await msg.channel.send({ embeds: [buildHmoEmbed()], components: [hmoRow] });
     msg.delete().catch(() => {});
-    activeHearmeouts.set(msg.channel.id, { userId, userName, votes, buildHmoEmbed });
 
-    setTimeout(async () => {
-      const hmo = activeHearmeouts.get(msg.channel.id);
-      activeHearmeouts.delete(msg.channel.id);
-      if (!hmo) return;
-
-      const upCount = hmo.votes.up.size;
-      const kittensEarned = upCount * 50;
-      if (kittensEarned > 0) addKittens(hmo.userId, kittensEarned);
-      saveData(db);
-
-      await sentMsg.edit({ embeds: [hmo.buildHmoEmbed(true)], components: [] }).catch(() => {});
-
-      const upVoters = [...hmo.votes.up].map(id => `<@${id}>`).join(", ") || "*nobody*";
-      const downVoters = [...hmo.votes.down].map(id => `<@${id}>`).join(", ") || "*nobody*";
-      const voterLog = `👍 ${upVoters}\n👎 ${downVoters}`;
-
-      if (kittensEarned > 0) {
-        await msg.channel.send(`🎂 **${hmo.userName}** earned **${kittensEarned} 🐱 kittens** from their hearmeout! (${upCount} 👍)\n${voterLog}`);
-      } else {
-        await msg.channel.send(`🎂 **${hmo.userName}**'s hearmeout got no 👍... tough crowd.\n${voterLog}`);
-      }
-    }, 2 * 60 * 1000);
+    if (!activeHearmeouts.has(msg.channel.id)) {
+      await runHearmeout(msg.channel, { userId, userName, statement, imageFile });
+    } else {
+      if (!hearmeoutQueues.has(msg.channel.id)) hearmeoutQueues.set(msg.channel.id, []);
+      hearmeoutQueues.get(msg.channel.id).push({ userId, userName, statement, imageFile });
+      const pos = hearmeoutQueues.get(msg.channel.id).length;
+      const notice = await msg.channel.send(`🎂 **${userName}**'s hearmeout has been queued (#${pos + 1})!`);
+      setTimeout(() => notice.delete().catch(() => {}), 5000);
+    }
   }
 
   // ── !heist ────────────────────────────────────────────────
