@@ -3630,8 +3630,21 @@ client.on("messageCreate", async (msg) => {
 
   // ── !touch ────────────────────────────────────────────────
   else if (cmd === "touch") {
-    const target = msg.mentions.users.first();
-    if (!target) return msg.reply("❌ Usage: `!touch @user`");
+    let target = msg.mentions.users.first();
+
+    if (!target) {
+      // Pick a random ekitten member
+      await msg.guild?.members.fetch().catch(() => {});
+      const role = msg.guild?.roles.cache.find((r) => r.name === EKITTEN_ROLE_NAME);
+      const candidates = role
+        ? [...msg.guild.members.cache.values()].filter(
+            (m) => m.roles.cache.has(role.id) && !m.user.bot && m.id !== userId
+          )
+        : [];
+      if (!candidates.length) return msg.reply("❌ Usage: `!touch @user`");
+      target = candidates[Math.floor(Math.random() * candidates.length)].user;
+    }
+
     if (target.bot) return msg.reply("❌ The bot has a strict no-touch policy.");
 
     const senderDisplay = msg.guild?.members.cache.get(userId)?.displayName ?? userName;
@@ -3639,31 +3652,31 @@ client.on("messageCreate", async (msg) => {
 
     if (target.id === userId) {
       const selfRemarks = [
-        `**${senderDisplay}** touched themselves. No comment.`,
-        `**${senderDisplay}** touched themselves and immediately felt shame.`,
-        `**${senderDisplay}** touched themselves. The server watched in silence.`,
-        `**${senderDisplay}** reached out... and touched themselves. Bold.`,
-        `**${senderDisplay}** touched themselves. Everyone pretended not to see.`,
+        `**${senderDisplay}** touched themselves. Respectable.`,
+        `**${senderDisplay}** gave themselves a little pat. You deserve it.`,
+        `**${senderDisplay}** poked themselves. Just checking if they're real.`,
+        `**${senderDisplay}** touched themselves on the shoulder reassuringly.`,
+        `**${senderDisplay}** booped their own nose. 🐾`,
       ];
       return msg.channel.send(selfRemarks[Math.floor(Math.random() * selfRemarks.length)]);
     }
 
     const remarks = [
-      `**${senderDisplay}** poked **${targetDisplay}**. **${targetDisplay}** did not consent but also did not resist.`,
-      `**${senderDisplay}** touched **${targetDisplay}**. A single tear rolled down **${targetDisplay}**'s cheek.`,
-      `**${senderDisplay}** reached out and touched **${targetDisplay}**. The physical contact was noted and logged.`,
-      `**${senderDisplay}** touched **${targetDisplay}** with one finger. **${targetDisplay}** is now legally tainted.`,
-      `**${senderDisplay}** touched **${targetDisplay}**. **${targetDisplay}**'s skin crawled but they said nothing.`,
-      `**${senderDisplay}** made physical contact with **${targetDisplay}**. Both parties are changed forever.`,
-      `**${senderDisplay}** touched **${targetDisplay}**. It felt exactly as weird as expected.`,
-      `**${senderDisplay}** poked **${targetDisplay}** in the side. **${targetDisplay}** pretended not to feel it.`,
-      `**${senderDisplay}** touched **${targetDisplay}**. **${targetDisplay}** stared straight ahead and dissociated.`,
-      `**${senderDisplay}** reached out and touched **${targetDisplay}**. Society crumbled slightly.`,
-      `**${senderDisplay}** touched **${targetDisplay}**. **${targetDisplay}** filed a mental report.`,
-      `**${senderDisplay}** touched **${targetDisplay}** on the shoulder. Neither spoke of it again.`,
-      `**${senderDisplay}** poked **${targetDisplay}**. **${targetDisplay}** considered their life choices.`,
-      `**${senderDisplay}** touched **${targetDisplay}**. Witnesses are already forgetting what they saw.`,
-      `**${senderDisplay}** made contact with **${targetDisplay}**. The touch was wet somehow.`,
+      `**${senderDisplay}** poked **${targetDisplay}**. 👉`,
+      `**${senderDisplay}** tapped **${targetDisplay}** on the shoulder.`,
+      `**${senderDisplay}** gave **${targetDisplay}** a little boop on the nose. 🐾`,
+      `**${senderDisplay}** patted **${targetDisplay}** on the head. 🐱`,
+      `**${senderDisplay}** poked **${targetDisplay}** in the side. Ticklish?`,
+      `**${senderDisplay}** reached over and tapped **${targetDisplay}** twice.`,
+      `**${senderDisplay}** gave **${targetDisplay}** a friendly nudge.`,
+      `**${senderDisplay}** booped **${targetDisplay}**. 👈`,
+      `**${senderDisplay}** lightly flicked **${targetDisplay}** on the forehead.`,
+      `**${senderDisplay}** gave **${targetDisplay}** a little pat on the back.`,
+      `**${senderDisplay}** poked **${targetDisplay}**'s cheek.`,
+      `**${senderDisplay}** tapped **${targetDisplay}** on the arm like "hey. hey. hey."`,
+      `**${senderDisplay}** snuck up and poked **${targetDisplay}**. Tag, you're it.`,
+      `**${senderDisplay}** gently bonked **${targetDisplay}** on the head. 🔨`,
+      `**${senderDisplay}** gave **${targetDisplay}** a firm but loving handshake.`,
     ];
 
     await msg.channel.send(`<@${target.id}> ` + remarks[Math.floor(Math.random() * remarks.length)]);
