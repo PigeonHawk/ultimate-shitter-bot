@@ -2116,10 +2116,11 @@ client.on("messageCreate", async (msg) => {
 
     while (true) {
       const currentName = msg.guild?.members.cache.get(current.id)?.displayName ?? current.username;
-      if (Math.random() < HIT_CHANCE) {
+      ensureUser(current.id, current.username);
+      const currentKittens = getKittens(current.id);
+      if (Math.random() < HIT_CHANCE && currentKittens > 0) {
         chain.push(`**${currentName}** 💥`);
-        ensureUser(current.id, current.username);
-        const before = getKittens(current.id);
+        const before = currentKittens;
         removeKittens(current.id, BOMB_AMOUNT);
         saveData(db);
         const after = getKittens(current.id);
@@ -2133,10 +2134,13 @@ client.on("messageCreate", async (msg) => {
         await msg.channel.send({ embeds: [embed] });
         break;
       } else {
-        chain.push(`**${currentName}**`);
+        if (currentKittens === 0) {
+          chain.push(`**${currentName}** 🪃`);
+        } else {
+          chain.push(`**${currentName}**`);
+        }
         if (memberPool.length === 0) break;
         current = memberPool[Math.floor(Math.random() * memberPool.length)].user;
-        ensureUser(current.id, current.username);
       }
     }
   }
