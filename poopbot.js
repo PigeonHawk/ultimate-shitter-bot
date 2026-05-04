@@ -3987,9 +3987,45 @@ client.on("interactionCreate", async (interaction) => {
 });
 
 // ── Ready ──────────────────────────────────────────────────
-client.once("ready", () => {
+client.once("ready", async () => {
   console.log(`[UltimateShitter] Logged in as ${client.user.tag} 💩`);
   client.user.setActivity("the toilet 🚽", { type: 3 });
+
+  // On deploy, randomly pick an ekitten member to be "it"
+  if (!db.tag) db.tag = { itUserId: null, itUserName: null };
+  const eligible = [];
+  const seen = new Set();
+  for (const guild of client.guilds.cache.values()) {
+    await guild.members.fetch().catch(() => {});
+    const role = guild.roles.cache.find((r) => r.name === EKITTEN_ROLE_NAME);
+    if (!role) continue;
+    guild.members.cache.forEach((member) => {
+      if (member.roles.cache.has(role.id) && !member.user.bot && !seen.has(member.user.id)) {
+        seen.add(member.user.id);
+        eligible.push({ id: member.user.id, name: member.displayName ?? member.user.username });
+      }
+    });
+  }
+  if (eligible.length > 0) {
+    const chosen = eligible[Math.floor(Math.random() * eligible.length)];
+    db.tag = { itUserId: chosen.id, itUserName: chosen.name };
+    ensureUser(chosen.id, chosen.name);
+    saveData(db);
+    client.guilds.cache.forEach(async (guild) => {
+      const channel = guild.channels.cache.find(
+        (c) => c.type === 0 && (c.name === "🤑golden-saucer" || c.name === "golden-saucer" || c.name === "general")
+      );
+      if (!channel) return;
+      const member = guild.members.cache.get(chosen.id);
+      const itName = member?.displayName ?? chosen.name;
+      const embed = new EmbedBuilder()
+        .setTitle("🏷️  Tag — Bot Restarted!")
+        .setDescription(`🎯 **${itName}** is now 'it'! They can \`!tag @user\` up to **5 times per hour**.\nWhoever is 'it' at midnight tonight loses **100 🐱 kittens**! 🌙`)
+        .setColor(0xff6b6b)
+        .setTimestamp();
+      await channel.send({ embeds: [embed] }).catch(() => {});
+    });
+  }
 });
 
 client.login(BOT_TOKEN);
