@@ -1518,7 +1518,7 @@ async function runTagDailyReset() {
       .setDescription(desc)
       .setColor(0xff6b6b)
       .setTimestamp();
-    await channel.send({ embeds: [embed] }).catch(() => {});
+    await channel.send({ content: db.tag.itUserId ? `<@${db.tag.itUserId}>` : undefined, embeds: [embed] }).catch(() => {});
   });
 }
 
@@ -3608,7 +3608,7 @@ client.on("messageCreate", async (msg) => {
         .addFields({ name: targetName, value: `${getKittens(target.id).toLocaleString()} 🐱`, inline: true })
         .setFooter({ text: `${userName} has ${attemptsLeft} tag attempt${attemptsLeft !== 1 ? "s" : ""} left this hour` })
         .setTimestamp();
-      await msg.channel.send({ embeds: [tagEmbed] });
+      await msg.channel.send({ content: `<@${target.id}>`, embeds: [tagEmbed] });
     } else {
       saveData(db);
       const missEmbed = new EmbedBuilder()
@@ -4011,20 +4011,6 @@ client.once("ready", async () => {
     db.tag = { itUserId: chosen.id, itUserName: chosen.name };
     ensureUser(chosen.id, chosen.name);
     saveData(db);
-    client.guilds.cache.forEach(async (guild) => {
-      const channel = guild.channels.cache.find(
-        (c) => c.type === 0 && (c.name === "🤑golden-saucer" || c.name === "golden-saucer" || c.name === "general")
-      );
-      if (!channel) return;
-      const member = guild.members.cache.get(chosen.id);
-      const itName = member?.displayName ?? chosen.name;
-      const embed = new EmbedBuilder()
-        .setTitle("🏷️  Tag — Bot Restarted!")
-        .setDescription(`🎯 **${itName}** is now 'it'! They can \`!tag @user\` up to **5 times per hour**.\nWhoever is 'it' at midnight tonight loses **100 🐱 kittens**! 🌙`)
-        .setColor(0xff6b6b)
-        .setTimestamp();
-      await channel.send({ embeds: [embed] }).catch(() => {});
-    });
   }
 });
 
