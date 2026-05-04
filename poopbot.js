@@ -3995,26 +3995,28 @@ client.once("ready", async () => {
   console.log(`[UltimateShitter] Logged in as ${client.user.tag} 💩`);
   client.user.setActivity("the toilet 🚽", { type: 3 });
 
-  // On deploy, randomly pick an ekitten member to be "it"
+  // Only pick a random "it" on first boot — preserve whoever is already "it" across deploys
   if (!db.tag) db.tag = { itUserId: null, itUserName: null };
-  const eligible = [];
-  const seen = new Set();
-  for (const guild of client.guilds.cache.values()) {
-    await guild.members.fetch().catch(() => {});
-    const role = guild.roles.cache.find((r) => r.name === EKITTEN_ROLE_NAME);
-    if (!role) continue;
-    guild.members.cache.forEach((member) => {
-      if (member.roles.cache.has(role.id) && !member.user.bot && !seen.has(member.user.id)) {
-        seen.add(member.user.id);
-        eligible.push({ id: member.user.id, name: member.displayName ?? member.user.username });
-      }
-    });
-  }
-  if (eligible.length > 0) {
-    const chosen = eligible[Math.floor(Math.random() * eligible.length)];
-    db.tag = { itUserId: chosen.id, itUserName: chosen.name };
-    ensureUser(chosen.id, chosen.name);
-    saveData(db);
+  if (!db.tag.itUserId) {
+    const eligible = [];
+    const seen = new Set();
+    for (const guild of client.guilds.cache.values()) {
+      await guild.members.fetch().catch(() => {});
+      const role = guild.roles.cache.find((r) => r.name === EKITTEN_ROLE_NAME);
+      if (!role) continue;
+      guild.members.cache.forEach((member) => {
+        if (member.roles.cache.has(role.id) && !member.user.bot && !seen.has(member.user.id)) {
+          seen.add(member.user.id);
+          eligible.push({ id: member.user.id, name: member.displayName ?? member.user.username });
+        }
+      });
+    }
+    if (eligible.length > 0) {
+      const chosen = eligible[Math.floor(Math.random() * eligible.length)];
+      db.tag = { itUserId: chosen.id, itUserName: chosen.name };
+      ensureUser(chosen.id, chosen.name);
+      saveData(db);
+    }
   }
 });
 
