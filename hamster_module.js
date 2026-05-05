@@ -792,6 +792,7 @@ async function hamHandleCommand(cmd, msg, args, userId, userName) {
         "`!hamplay` — let your two hamsters hang out together",
         "`!hamrename <1 or 2> <name>` — give a hamster a nickname",
         "`!hamtrade @user [your slot] [their slot]` — propose a trade",
+        "`!hamsell <1 or 2>` — sell a hamster back to the shop",
       ].join("\n"))
       .setColor(0xff9ecd)
       .setTimestamp()] });
