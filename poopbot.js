@@ -3937,8 +3937,10 @@ client.on("messageCreate", async (msg) => {
     if (target.id === userId) return msg.reply("❌ You cannot slap your own ass. That's just clapping.");
 
     const now = Date.now();
+    const pstHour = new Date(now).toLocaleString("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", hour12: false });
+    const isSlapHappyHour = Number(pstHour) === 0; // midnight–1am PST
     const recentSlaps = (slapAssTimestamps.get(userId) ?? []).filter(t => now - t < 3_600_000);
-    if (recentSlaps.length >= 3) {
+    if (!isSlapHappyHour && recentSlaps.length >= 3) {
       const oldest = recentSlaps[0];
       const msLeft = 3_600_000 - (now - oldest);
       const minsLeft = Math.ceil(msLeft / 60_000);
