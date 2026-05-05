@@ -3946,8 +3946,10 @@ client.on("messageCreate", async (msg) => {
       const minsLeft = Math.ceil(msLeft / 60_000);
       return msg.reply(`❌ You've slapped enough ass for one hour. Cooldown: **${minsLeft} minute${minsLeft !== 1 ? "s" : ""}**.`);
     }
-    recentSlaps.push(now);
-    slapAssTimestamps.set(userId, recentSlaps);
+    if (!isSlapHappyHour) {
+      recentSlaps.push(now);
+      slapAssTimestamps.set(userId, recentSlaps);
+    }
 
     ensureUser(userId, userName);
     ensureUser(target.id, target.username);
