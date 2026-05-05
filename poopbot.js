@@ -16,6 +16,7 @@
 const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require("discord.js");
 const cron = require("node-cron");
 const fs = require("fs");
+const hamsterInit = require("./hamster_module");
 
 // ── Config ─────────────────────────────────────────────────
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -1326,6 +1327,9 @@ const client = new Client({
 let db = loadData();
 if (!db.tag) db.tag = { itUserId: null, itUserName: null };
 
+const { hamHandleCommand, registerInteractions, handleRename } = hamsterInit({ client, db, saveData, addKittens, removeKittens, getKittens, ensureUser, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PREFIX });
+registerInteractions();
+
 function runDailyReset() {
   pickTodaysWindows();
   for (const user of Object.values(db.users)) {
@@ -1672,6 +1676,7 @@ async function runHearmeout(channel, { userId, userName, statement, imageFile })
 
 // ── Message handler ────────────────────────────────────────
 client.on("messageCreate", async (msg) => {
+  if (await handleRename(msg)) return;
   if (msg.author.bot) return;
 
   const userId = msg.author.id;
@@ -4085,6 +4090,7 @@ client.on("messageCreate", async (msg) => {
       doRicochet();
     }
   }
+  else { await hamHandleCommand(cmd, msg, args, userId, userName); }
 });
 
 // ── Blackjack interactions ─────────────────────────────────
