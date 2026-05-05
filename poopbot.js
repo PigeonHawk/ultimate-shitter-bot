@@ -2666,11 +2666,16 @@ client.on("messageCreate", async (msg) => {
   else if (cmd === "editkittens") {
     if (msg.guild) return msg.reply("❌ This command only works in DMs with the bot.");
     const password = args[0];
-    const targetUser = msg.mentions.users.first();
     const newAmount = parseInt(args[2]);
     if (!password || password !== ADMIN_PASSWORD) return msg.reply("❌ Invalid password.");
-    if (!targetUser) return msg.reply("❌ Usage: `!editkittens <password> @user <amount>`");
     if (isNaN(newAmount) || newAmount < 0) return msg.reply("❌ Please provide a valid kitten amount.");
+    let targetUser = msg.mentions.users.first();
+    if (!targetUser) {
+      const userId = args[1]?.replace(/[<@!>]/g, "");
+      if (!userId) return msg.reply("❌ Usage: `!editkittens <password> @user <amount>`");
+      targetUser = await client.users.fetch(userId).catch(() => null);
+      if (!targetUser) return msg.reply("❌ Could not find that user. Try using their user ID instead of a mention.");
+    }
     ensureUser(targetUser.id, targetUser.username);
     const oldKittens = db.users[targetUser.id].kittens ?? 0;
     db.users[targetUser.id].kittens = newAmount;
