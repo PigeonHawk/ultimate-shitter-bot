@@ -3850,16 +3850,16 @@ client.on("messageCreate", async (msg) => {
     if (target.bot) return msg.reply("❌ Bots don't have asses worth slapping.");
     if (target.id === userId) return msg.reply("❌ You cannot slap your own ass. That's just clapping.");
 
-    // const now = Date.now();
-    // const recentSlaps = (slapAssTimestamps.get(userId) ?? []).filter(t => now - t < 3_600_000);
-    // if (recentSlaps.length >= 3) {
-    //   const oldest = recentSlaps[0];
-    //   const msLeft = 3_600_000 - (now - oldest);
-    //   const minsLeft = Math.ceil(msLeft / 60_000);
-    //   return msg.reply(`❌ You've slapped enough ass for one hour. Cooldown: **${minsLeft} minute${minsLeft !== 1 ? "s" : ""}**.`);
-    // }
-    // recentSlaps.push(now);
-    // slapAssTimestamps.set(userId, recentSlaps);
+    const now = Date.now();
+    const recentSlaps = (slapAssTimestamps.get(userId) ?? []).filter(t => now - t < 3_600_000);
+    if (recentSlaps.length >= 3) {
+      const oldest = recentSlaps[0];
+      const msLeft = 3_600_000 - (now - oldest);
+      const minsLeft = Math.ceil(msLeft / 60_000);
+      return msg.reply(`❌ You've slapped enough ass for one hour. Cooldown: **${minsLeft} minute${minsLeft !== 1 ? "s" : ""}**.`);
+    }
+    recentSlaps.push(now);
+    slapAssTimestamps.set(userId, recentSlaps);
 
     ensureUser(userId, userName);
     ensureUser(target.id, target.username);
