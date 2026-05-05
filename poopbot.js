@@ -3894,6 +3894,38 @@ client.on("messageCreate", async (msg) => {
 
     const kittensEarned = Math.floor(Math.random() * 26); // 0–25 (held in escrow)
 
+    // 10% ricochet — find a random ekitten member to catch collateral
+    let ricochetMember = null;
+    if (Math.random() < 0.1 && msg.guild) {
+      const ekittenRole = msg.guild.roles.cache.find(r => r.name === EKITTEN_ROLE_NAME);
+      if (ekittenRole) {
+        await msg.guild.members.fetch().catch(() => {});
+        const candidates = [...msg.guild.members.cache.values()].filter(m =>
+          m.roles.cache.has(ekittenRole.id) && m.id !== target.id && m.id !== userId && !m.user.bot
+        );
+        if (candidates.length > 0) ricochetMember = candidates[Math.floor(Math.random() * candidates.length)];
+      }
+    }
+
+    const doRicochet = async () => {
+      if (!ricochetMember) return;
+      const ricochetDisplay = ricochetMember.displayName ?? ricochetMember.user.username;
+      ensureUser(ricochetMember.id, ricochetMember.user.username);
+      const ricochetKittens = Math.floor(Math.random() * 26);
+      const ricochetLines = [
+        `💥 The slap ricocheted off **${targetDisplay}**'s ass and NAILED **${ricochetDisplay}** as collateral.`,
+        `💥 The kinetic energy didn't stop there — **${ricochetDisplay}** caught a stray slap and didn't even see it coming.`,
+        `💥 **${ricochetDisplay}** was an innocent bystander. Was. The ricochet found them anyway.`,
+        `💥 Physics said no. The slap bounced off **${targetDisplay}** and clocked **${ricochetDisplay}** clean in the cheeks.`,
+      ];
+      const ricochetLine = ricochetLines[Math.floor(Math.random() * ricochetLines.length)];
+      const ricochetKittenLine = ricochetKittens === 0
+        ? `\n😔 Nothing flew out. Dry ricochet.`
+        : `\n🐱 **${ricochetKittens} kitten${ricochetKittens !== 1 ? "s" : ""}** scattered from the impact!`;
+      if (ricochetKittens > 0) addKittens(userId, ricochetKittens);
+      await msg.channel.send(`${ricochetLine}${ricochetKittenLine}`).catch(() => {});
+    };
+
     const slapLines = [
       `**${slapperDisplay}** reared back and absolutely *CLAPPED* **${targetDisplay}**'s ass.`,
       `**${slapperDisplay}** walked up and delivered a firm, open-palmed slap to **${targetDisplay}**'s posterior.`,
@@ -3935,7 +3967,7 @@ client.on("messageCreate", async (msg) => {
 
     const sentMsg = await msg.channel.send({
       content: shieldRow
-        ? `${slapLine}${kittenLine}${pingLine}`
+        ? `${slapLine}${pingLine}`
         : `${slapLine}\n${jiggleComment}${kittenLine}`,
       components: shieldRow ? [shieldRow] : [],
     });
@@ -3944,6 +3976,7 @@ client.on("messageCreate", async (msg) => {
       pendingSlapShields.delete(slapId);
       if (kittensEarned > 0) addKittens(userId, kittensEarned);
       sentMsg.edit({ content: `${slapLine}${kittenLine}\n${jiggleComment}`, components: [] }).catch(() => {});
+      doRicochet();
     };
 
     if (shieldRow) {
@@ -3959,6 +3992,7 @@ client.on("messageCreate", async (msg) => {
       });
     } else {
       if (kittensEarned > 0) addKittens(userId, kittensEarned);
+      doRicochet();
     }
   }
 });
