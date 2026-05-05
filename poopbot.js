@@ -1134,6 +1134,8 @@ const FREAKY_TOUCH_REMARKS = [
 ];
 const activeHeists = new Map();
 const activeRussians = new Map();
+const slapAssTimestamps = new Map(); // userId → [timestamp, ...]
+const pendingSlapShields = new Map(); // slapId → { slapperId, slapperName, targetId, targetName, kittens, timeout, message }
 
 // ── Hangman helpers ────────────────────────────────────────
 const activeHangman = new Map();
@@ -2682,6 +2684,7 @@ client.on("messageCreate", async (msg) => {
         { name: "`!rps <bet>` / `!rps @user <bet>`", value: "Play Rock Paper Scissors vs the house (win doubles your bet, tie refunds it) — or challenge someone 1v1 (winner takes the other's bet)" },
         { name: "`!rob [@user] <amount> [rps]`", value: "Rob a random user or target a specific one — dice roll (default) or rps · win 1.5× stake · 2 robs/day · 30s to respond" },
         { name: "`!bomb @user`", value: "Throw a bomb at someone — 20% chance it goes off and obliterates 100 🐱 kittens · deflects to a random server member each miss until it hits" },
+        { name: "`!slapass @user`", value: "Slap someone's ass — it jiggles for a random amount of time and up to 25 🐱 kittens fly out at the slapper" },
         { name: "`!beg`", value: "Beg the house for kittens — 40% chance of 1–200 🐱, 100% chance of humiliation" },
         { name: "`!jackpot` / `!megajackpot`", value: "Buy a jackpot ticket (**10 🐱**, 1 in 50) or mega jackpot ticket (**50 🐱**, 1 in 100) — winner takes the whole pot · `!jackpot info` / `!megajackpot info` to see current pots" },
         { name: "`!crash <bet>`", value: "Bet kittens on a growing multiplier — cash out before it crashes! Others can join with the same bet. (3% house edge, max 2,000 🐱)" },
@@ -3839,6 +3842,121 @@ client.on("messageCreate", async (msg) => {
       components: [revealRow],
     });
   }
+
+  // ── !slapass ──────────────────────────────────────────────
+  else if (cmd === "slapass") {
+    let target = msg.mentions.users.first();
+    if (!target) return msg.reply("❌ Usage: `!slapass @user`");
+    if (target.bot) return msg.reply("❌ Bots don't have asses worth slapping.");
+    if (target.id === userId) return msg.reply("❌ You cannot slap your own ass. That's just clapping.");
+
+    const now = Date.now();
+    const recentSlaps = (slapAssTimestamps.get(userId) ?? []).filter(t => now - t < 3_600_000);
+    if (recentSlaps.length >= 3) {
+      const oldest = recentSlaps[0];
+      const msLeft = 3_600_000 - (now - oldest);
+      const minsLeft = Math.ceil(msLeft / 60_000);
+      return msg.reply(`❌ You've slapped enough ass for one hour. Cooldown: **${minsLeft} minute${minsLeft !== 1 ? "s" : ""}**.`);
+    }
+    recentSlaps.push(now);
+    slapAssTimestamps.set(userId, recentSlaps);
+
+    ensureUser(userId, userName);
+    ensureUser(target.id, target.username);
+
+    const slapperDisplay = msg.member?.displayName ?? userName;
+    const targetDisplay = msg.guild?.members.cache.get(target.id)?.displayName ?? target.username;
+
+    // Random jiggle duration: 1–90 seconds OR 1–5 minutes
+    const useMinutes = Math.random() < 0.3;
+    let jiggleDuration, jiggleText;
+    if (useMinutes) {
+      const mins = Math.floor(Math.random() * 5) + 1;
+      jiggleDuration = mins;
+      const minutePhrases = [
+        `an absolutely unhinged **${mins} minute${mins > 1 ? "s"  : ""}**`,
+        `a devastating **${mins} full minute${mins > 1 ? "s" : ""}**`,
+        `${mins} whole minute${mins > 1 ? "s" : ""}, God help us`,
+        `**${mins} minute${mins > 1 ? "s" : ""}** straight, no breaks`,
+      ];
+      jiggleText = minutePhrases[Math.floor(Math.random() * minutePhrases.length)];
+    } else {
+      const secs = Math.floor(Math.random() * 90) + 1;
+      jiggleDuration = secs;
+      const secondPhrases = [
+        `a respectable **${secs} second${secs !== 1 ? "s" : ""}**`,
+        `exactly **${secs} second${secs !== 1 ? "s" : ""}**, scientifically measured`,
+        `**${secs} second${secs !== 1 ? "s" : ""}** of pure chaos`,
+        `${secs} second${secs !== 1 ? "s" : ""} (witnesses were stunned)`,
+      ];
+      jiggleText = secondPhrases[Math.floor(Math.random() * secondPhrases.length)];
+    }
+
+    const kittensEarned = Math.floor(Math.random() * 26); // 0–25 (held in escrow)
+
+    const slapLines = [
+      `**${slapperDisplay}** reared back and absolutely *CLAPPED* **${targetDisplay}**'s ass.`,
+      `**${slapperDisplay}** walked up and delivered a firm, open-palmed slap to **${targetDisplay}**'s posterior.`,
+      `**${slapperDisplay}** came out of NOWHERE and slapped **${targetDisplay}**'s ass with the force of a thousand suns.`,
+      `**${slapperDisplay}** casually strolled over and smacked **${targetDisplay}**'s cheeks like they owned the place.`,
+      `**${slapperDisplay}** wound up like a baseball pitcher and CONNECTED with **${targetDisplay}**'s ass.`,
+    ];
+    const slapLine = slapLines[Math.floor(Math.random() * slapLines.length)];
+
+    const jiggleComments = [
+      `It jiggled for ${jiggleText}. Remarkable.`,
+      `The jiggle lasted ${jiggleText}. Scientists are baffled.`,
+      `Observers reported jiggling for ${jiggleText}. No survivors.`,
+      `The resulting jiggle went on for ${jiggleText}. The room fell silent.`,
+      `It continued jiggling for ${jiggleText}. Nobody moved. Nobody spoke.`,
+    ];
+    const jiggleComment = jiggleComments[Math.floor(Math.random() * jiggleComments.length)];
+
+    let kittenLine = "";
+    if (kittensEarned === 0) {
+      kittenLine = `\n😔 No kittens flew out. Dry slap.`;
+    } else {
+      kittenLine = `\n🐱 **${kittensEarned} kitten${kittensEarned !== 1 ? "s" : ""}** flew out toward **${slapperDisplay}**...`;
+    }
+
+    const targetFartPoints = db.users[target.id]?.fartPoints ?? 0;
+    const slapId = `${Date.now()}_${userId}`;
+
+    const shieldRow = targetFartPoints > 0
+      ? new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`slapass_shield_${slapId}`)
+            .setLabel(`💨 Shield (${targetFartPoints} 💨)`)
+            .setStyle(ButtonStyle.Primary)
+        )
+      : null;
+
+    const sentMsg = await msg.channel.send({
+      content: `${slapLine}\n${jiggleComment}${kittenLine}`,
+      components: shieldRow ? [shieldRow] : [],
+    });
+
+    const awardSlap = () => {
+      pendingSlapShields.delete(slapId);
+      if (kittensEarned > 0) addKittens(userId, kittensEarned);
+      sentMsg.edit({ components: [] }).catch(() => {});
+    };
+
+    if (shieldRow) {
+      const timeout = setTimeout(awardSlap, 15_000);
+      pendingSlapShields.set(slapId, {
+        slapperId: userId,
+        slapperName: slapperDisplay,
+        targetId: target.id,
+        targetName: targetDisplay,
+        kittens: kittensEarned,
+        timeout,
+        message: sentMsg,
+      });
+    } else {
+      if (kittensEarned > 0) addKittens(userId, kittensEarned);
+    }
+  }
 });
 
 // ── Blackjack interactions ─────────────────────────────────
@@ -3895,6 +4013,46 @@ client.on("interactionCreate", async (interaction) => {
 
   pendingFreakyTouches.delete(revealId);
   await interaction.update({ content: pending.message, components: [] });
+});
+
+// ── Slapass shield interactions ────────────────────────────
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isButton()) return;
+  const { customId, user } = interaction;
+  if (!customId.startsWith("slapass_shield_")) return;
+
+  const slapId = customId.slice("slapass_shield_".length);
+  const pending = pendingSlapShields.get(slapId);
+  if (!pending) return interaction.reply({ content: "❌ This slap already landed.", ephemeral: true });
+
+  if (user.id !== pending.targetId) {
+    return interaction.reply({ content: "❌ That's not your ass to shield!", ephemeral: true });
+  }
+
+  const fartPoints = db.users[pending.targetId]?.fartPoints ?? 0;
+  if (fartPoints <= 0) {
+    return interaction.reply({ content: "❌ You're out of 💨 fart points — nothing to shield with!", ephemeral: true });
+  }
+
+  clearTimeout(pending.timeout);
+  pendingSlapShields.delete(slapId);
+
+  db.users[pending.targetId].fartPoints = fartPoints - 1;
+  saveData(db);
+
+  const shieldLines = [
+    `💨 **${pending.targetName}** ripped a massive fart and blew the slap clean away. **${pending.slapperName}** got nothing.`,
+    `💨 **${pending.targetName}** farted so hard the shockwave deflected the slap. **${pending.slapperName}** is covered in shame.`,
+    `💨 **${pending.targetName}** deployed a tactical fart shield. The kittens scattered. **${pending.slapperName}** is empty-handed.`,
+    `💨 **${pending.targetName}**'s fart acted as a natural cushion. Slap nullified. **${pending.slapperName}** walks away with nothing.`,
+  ];
+  const shieldLine = shieldLines[Math.floor(Math.random() * shieldLines.length)];
+  const pointsLeft = fartPoints - 1;
+
+  await interaction.update({
+    content: `${interaction.message.content}\n${shieldLine} *(${pending.targetName} has **${pointsLeft} 💨** remaining)*`,
+    components: [],
+  });
 });
 
 // ── RPS interactions ───────────────────────────────────────
