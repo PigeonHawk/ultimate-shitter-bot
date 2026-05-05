@@ -1727,7 +1727,7 @@ client.on("messageCreate", async (msg) => {
 
   if (!msg.guild) {
     if (!msg.content.startsWith(PREFIX)) {
-      await msg.reply("💩 hey! i got your DM. use `!editkittens` or `!help` here.");
+      await msg.reply("💩 hey! i got your DM. use `!editkittens`, `!addkittens`, or `!help` here.");
       return;
     }
   } else if (!msg.content.startsWith(PREFIX)) return;
@@ -2691,6 +2691,40 @@ client.on("messageCreate", async (msg) => {
     db.users[targetUser.id].kittens = newAmount;
     saveData(db);
     await msg.reply(`✅ Updated **${targetUser.username}**'s kittens from **${oldKittens}** to **${newAmount}** 🐱`);
+    await msg.delete().catch(() => {});
+  }
+
+  // ── !addkittens ───────────────────────────────────────────
+  else if (cmd === "addkittens") {
+    if (msg.guild) return msg.reply("❌ This command only works in DMs with the bot.");
+    const password = args[0];
+    const addAmount = parseInt(args[2]);
+    if (!password || password !== ADMIN_PASSWORD) return msg.reply("❌ Invalid password.");
+    if (isNaN(addAmount)) return msg.reply("❌ Please provide a valid kitten amount (can be negative).");
+    let targetUser = msg.mentions.users.first();
+    if (!targetUser) {
+      const userId = args[1]?.replace(/[<@!>]/g, "");
+      if (!userId) return msg.reply("❌ Usage: `!addkittens <password> @user <amount>`");
+      targetUser = await client.users.fetch(userId).catch(() => null);
+      if (!targetUser) {
+        const input = userId.toLowerCase();
+        const match = Object.entries(db.users).find(([, u]) => u.name?.toLowerCase() === input);
+        if (match) targetUser = await client.users.fetch(match[0]).catch(() => null);
+      }
+      if (!targetUser) {
+        const all = Object.entries(db.users)
+          .map(([id, u]) => `**${u.name}** (\`${id}\`)`)
+          .join("\n");
+        return msg.reply(`❌ Could not find that user. Known users:\n${all || "none"}`);
+      }
+    }
+    ensureUser(targetUser.id, targetUser.username);
+    const oldKittens = db.users[targetUser.id].kittens ?? 0;
+    const newKittens = Math.max(0, oldKittens + addAmount);
+    db.users[targetUser.id].kittens = newKittens;
+    saveData(db);
+    const sign = addAmount >= 0 ? "+" : "";
+    await msg.reply(`✅ **${targetUser.username}**'s kittens: **${oldKittens}** → **${newKittens}** (${sign}${addAmount}) 🐱`);
     await msg.delete().catch(() => {});
   }
 
