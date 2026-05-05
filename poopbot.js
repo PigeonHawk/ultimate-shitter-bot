@@ -3931,8 +3931,10 @@ client.on("messageCreate", async (msg) => {
         )
       : null;
 
+    const pingLine = shieldRow ? `\n<@${target.id}> — you have **30 seconds** to shield with a fart! 💨` : "";
+
     const sentMsg = await msg.channel.send({
-      content: `${slapLine}\n${jiggleComment}${kittenLine}`,
+      content: `${slapLine}\n${jiggleComment}${kittenLine}${pingLine}`,
       components: shieldRow ? [shieldRow] : [],
     });
 
@@ -3943,7 +3945,7 @@ client.on("messageCreate", async (msg) => {
     };
 
     if (shieldRow) {
-      const timeout = setTimeout(awardSlap, 15_000);
+      const timeout = setTimeout(awardSlap, 30_000);
       pendingSlapShields.set(slapId, {
         slapperId: userId,
         slapperName: slapperDisplay,
