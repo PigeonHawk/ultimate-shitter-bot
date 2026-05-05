@@ -27,7 +27,7 @@ const CHAMPION_ROLE_NAME = "The Ultimate Shitter";
 const FART_CHAMPION_ROLE_NAME = "The Ultimate Farter";
 const KITTENS_PER_MESSAGE = 5;
 const KITTENS_PER_VC_MINUTE = 5;
-const ADMIN_PASSWORD = "p00p5";
+const ADMIN_PASSWORD = "sh1t5";
 
 const DOUBLE_POINT_WINDOWS = [
   [2, 4],
@@ -2657,6 +2657,7 @@ client.on("messageCreate", async (msg) => {
 
   // ── !editkittens ──────────────────────────────────────────
   else if (cmd === "editkittens") {
+    if (msg.guild) return msg.reply("❌ This command only works in DMs with the bot.");
     const password = args[0];
     const targetUser = msg.mentions.users.first();
     const newAmount = parseInt(args[2]);
