@@ -790,6 +790,22 @@ const pendingHamsterRenames = new Map(); // userId → { slot, type, expiresAt }
 // =============================================================
 /*
 
+  // ── !hamhelp ──────────────────────────────────────────────
+  else if (cmd === "hamhelp") {
+    await msg.channel.send({ embeds: [new EmbedBuilder()
+      .setTitle("🐹  Hamster Commands")
+      .setDescription([
+        "`!shop` — browse and adopt hamsters",
+        "`!hamster` — visit your hamster(s)",
+        "`!hamster @user` — peek at someone else's hamster(s)",
+        "`!hamplay` — let your two hamsters hang out together",
+        "`!hamrename <1 or 2> <name>` — give a hamster a nickname",
+        "`!hamtrade @user [your slot] [their slot]` — propose a trade",
+      ].join("\n"))
+      .setColor(0xff9ecd)
+      .setTimestamp()] });
+  }
+
   // ── !shop ────────────────────────────────────────────────
   else if (cmd === "shop") {
     const { embed, rows } = buildShopPage(0);
