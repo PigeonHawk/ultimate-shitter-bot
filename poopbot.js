@@ -2674,7 +2674,17 @@ client.on("messageCreate", async (msg) => {
       const userId = args[1]?.replace(/[<@!>]/g, "");
       if (!userId) return msg.reply("❌ Usage: `!editkittens <password> @user <amount>`");
       targetUser = await client.users.fetch(userId).catch(() => null);
-      if (!targetUser) return msg.reply("❌ Could not find that user. Try using their user ID instead of a mention.");
+      if (!targetUser) {
+        const input = userId.toLowerCase();
+        const match = Object.entries(db.users).find(([, u]) => u.name?.toLowerCase() === input);
+        if (match) targetUser = await client.users.fetch(match[0]).catch(() => null);
+      }
+      if (!targetUser) {
+        const all = Object.entries(db.users)
+          .map(([id, u]) => `**${u.name}** (\`${id}\`)`)
+          .join("\n");
+        return msg.reply(`❌ Could not find that user. Known users:\n${all || "none"}`);
+      }
     }
     ensureUser(targetUser.id, targetUser.username);
     const oldKittens = db.users[targetUser.id].kittens ?? 0;
