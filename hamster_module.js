@@ -894,6 +894,43 @@ async function hamHandleCommand(cmd, msg, args, userId, userName) {
     }, 30_000);
     pendingHamsterTrades.set(tradeId, { offererId: userId, offererName: userName, targetId: target.id, targetName, offererSlot: mySlot, targetSlot: theirSlot, offererHamster: myH, targetHamster: theirH, timeout, message: sentMsg });
   }
+
+  // ── !hamsell ──────────────────────────────────────────────
+  else if (cmd === "hamsell") {
+    ensureUser(userId, userName);
+    const hams = getHamsters(userId);
+    if (hams.length === 0) return msg.reply("❌ You don't have any hamsters to sell!");
+
+    const slot = parseInt(args[0]) - 1;
+    if (isNaN(slot) || slot < 0 || slot >= hams.length) {
+      const list = hams.map((h, i) => `**${i + 1}.** ${h.nickname} (${h.type})`).join("\n");
+      return msg.reply(`❌ Usage: \`!hamsell <1 or 2>\`\n\nYour hamsters:\n${list}`);
+    }
+
+    const hamObj = hams[slot];
+    const refund = Math.floor(HAMSTER_DATA[hamObj.type].price / 2);
+
+    db.users[userId].hamsters.splice(slot, 1);
+
+    if (!db.hamsterStock) db.hamsterStock = {};
+    if ((db.hamsterStock[hamObj.type] ?? 0) > 0) {
+      db.hamsterStock[hamObj.type]--;
+    }
+
+    addKittens(userId, refund);
+    saveData(db);
+
+    await msg.reply({ embeds: [new EmbedBuilder()
+      .setTitle("🐹  Hamster Rehomed")
+      .setDescription(
+        `${hamObj.nickname} (${hamObj.type}) has been rehomed and returned to the shop.\n\n` +
+        `💸 You received ${refund.toLocaleString()} 🐱 kittens (50% of purchase price).`
+      )
+      .setColor(0x95a5a6)
+      .addFields({ name: "Balance", value: `${getKittens(userId).toLocaleString()} 🐱`, inline: true })
+      .setFooter({ text: "Visit !shop to adopt a new companion!" })
+      .setTimestamp()] });
+  }
 }
 
 function registerInteractions() {
@@ -950,11 +987,13 @@ client.on("interactionCreate", async (interaction) => {
     const response = getHamsterResponse(action, hamsterType).replace(new RegExp(hamsterType, "g"), hamObj.nickname);
     const actionEmoji = { pet:"🤲", feed:"🌻", play:"🎾", talk:"💬", walk:"🚶", bathe:"🛁" };
     const actionLabel = { pet:"Pet", feed:"Feed", play:"Play", talk:"Talk", walk:"Walk", bathe:"Bathe" };
-    return interaction.reply({ embeds: [new EmbedBuilder()
+    await interaction.reply({ embeds: [new EmbedBuilder()
       .setTitle(`${actionEmoji[action]}  ${actionLabel[action]}ing ${hamObj.nickname}`)
       .setDescription(response)
       .setThumbnail(HAMSTER_DATA[hamsterType].gif)
       .setColor(0xff9ecd).setTimestamp()] });
+    setTimeout(() => interaction.deleteReply().catch(() => {}), 3000);
+    return;
   }
 
   // ── Rename button ──────────────────────────────────────
