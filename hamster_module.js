@@ -1,11 +1,6 @@
-// ============================================================
-//  🐹  HAMSTER STORE MODULE — FULL VERSION
-//  ── Paste the data/helpers near the top of poopbot.js
-//  ── Paste command blocks inside messageCreate
-//  ── Paste the interactionCreate handler alongside your others
-//  ── Add the rename listener at the TOP of messageCreate
-//     (before the bot/prefix checks) — see bottom of file
-// ============================================================
+﻿// Hamster module — deps injected by hamsterInit()
+let db, saveData, addKittens, removeKittens, getKittens, ensureUser;
+let EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PREFIX, client;
 
 // ── Hamster data ───────────────────────────────────────────
 const HAMSTER_DATA = {
@@ -785,13 +780,9 @@ function buildHamsterRow(hamsterType, slot) {
 const pendingHamsterTrades = new Map();
 const pendingHamsterRenames = new Map(); // userId → { slot, type, expiresAt }
 
-// =============================================================
-// COMMAND HANDLERS — paste inside messageCreate
-// =============================================================
-/*
-
+async function hamHandleCommand(cmd, msg, args, userId, userName) {
   // ── !hamhelp ──────────────────────────────────────────────
-  else if (cmd === "hamhelp") {
+  if (cmd === "hamhelp") {
     await msg.channel.send({ embeds: [new EmbedBuilder()
       .setTitle("🐹  Hamster Commands")
       .setDescription([
@@ -903,13 +894,9 @@ const pendingHamsterRenames = new Map(); // userId → { slot, type, expiresAt }
     }, 30_000);
     pendingHamsterTrades.set(tradeId, { offererId: userId, offererName: userName, targetId: target.id, targetName, offererSlot: mySlot, targetSlot: theirSlot, offererHamster: myH, targetHamster: theirH, timeout, message: sentMsg });
   }
+}
 
-*/
-
-// =============================================================
-// interactionCreate HANDLER — paste alongside your others
-// =============================================================
-/*
+function registerInteractions() {
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
   const { customId, user } = interaction;
@@ -1012,13 +999,9 @@ client.on("interactionCreate", async (interaction) => {
       .setColor(0x2ecc71).setFooter({ text: "Use !hamster to visit your new companion!" }).setTimestamp()], components: [] });
   }
 });
-*/
+}
 
-// =============================================================
-// RENAME LISTENER — paste at the very TOP of messageCreate,
-// BEFORE the `if (msg.author.bot) return;` check
-// =============================================================
-/*
+async function handleRename(msg) {
   const renameData = pendingHamsterRenames.get(msg.author.id);
   if (renameData && !msg.author.bot) {
     if (Date.now() > renameData.expiresAt) {
@@ -1041,7 +1024,13 @@ client.on("interactionCreate", async (interaction) => {
           await msg.reply("❌ Something changed — rename cancelled.");
         }
       }
-      return;
+      return true;
     }
   }
-*/
+  return false;
+}
+
+module.exports = function hamsterInit(deps) {
+  ({ db, saveData, addKittens, removeKittens, getKittens, ensureUser, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PREFIX, client } = deps);
+  return { hamHandleCommand, registerInteractions, handleRename };
+};
