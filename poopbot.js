@@ -13,7 +13,7 @@
 //    - Drag the bot's role ABOVE it in Server Settings > Roles
 // ============================================================
 
-const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require("discord.js");
+const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require("discord.js");
 const cron = require("node-cron");
 const fs = require("fs");
 
@@ -1320,7 +1320,7 @@ const client = new Client({
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.DirectMessages,
   ],
-  partials: ["CHANNEL"],
+  partials: [Partials.Channel, Partials.Message, Partials.User],
 });
 
 let db = loadData();
@@ -1725,7 +1725,12 @@ client.on("messageCreate", async (msg) => {
     }
   }
 
-  if (!msg.content.startsWith(PREFIX)) return;
+  if (!msg.guild) {
+    if (!msg.content.startsWith(PREFIX)) {
+      await msg.reply("💩 hey! i got your DM. use `!editkittens` or `!help` here.");
+      return;
+    }
+  } else if (!msg.content.startsWith(PREFIX)) return;
   const args = msg.content.slice(PREFIX.length).trim().split(/\s+/);
   const cmd = args.shift().toLowerCase();
 
