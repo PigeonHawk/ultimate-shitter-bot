@@ -3894,9 +3894,9 @@ client.on("messageCreate", async (msg) => {
 
     const kittensEarned = Math.floor(Math.random() * 26); // 0–25 (held in escrow)
 
-    // 10% ricochet — find a random ekitten member to catch collateral
+    // 50% ricochet — find a random ekitten member to catch collateral
     let ricochetMember = null;
-    if (Math.random() < 0.1 && msg.guild) {
+    if (Math.random() < 0.5 && msg.guild) {
       const ekittenRole = msg.guild.roles.cache.find(r => r.name === EKITTEN_ROLE_NAME);
       if (ekittenRole) {
         await msg.guild.members.fetch().catch(() => {});
