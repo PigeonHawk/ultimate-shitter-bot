@@ -1677,7 +1677,7 @@ async function runHearmeout(channel, { userId, userName, statement, imageFile })
 // ── Message handler ────────────────────────────────────────
 client.on("messageCreate", async (msg) => {
   if (await handleRename(msg)) return;
-  if (msg.author.bot) return;
+
 
   const userId = msg.author.id;
   const userName = msg.member?.displayName ?? msg.author.username;
