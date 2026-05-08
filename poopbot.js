@@ -1486,35 +1486,6 @@ async function runDailyTax() {
 // 2 pm PST = 22:00 UTC
 cron.schedule("0 22 * * *", () => runDailyTax());
 
-// ── Good morning DMs ───────────────────────────────────────
-const GOOD_MORNING_MESSAGES = [
-  "🌅 good morning!! you have been selected by the poop council to wake up and log your morning dump. don't make us come find you.",
-  "☀️ rise and grind!! literally. your colon is ready. are YOU ready?",
-  "🚽 good morning beautiful. the toilet misses you. it's been waiting all night.",
-  "🌄 wakey wakey!! today is a new day full of endless possibilities and also farts. mostly farts.",
-  "🐱 good morning!! your kittens are cold and alone and the only way to warm them is to log a poop. probably.",
-  "☕ good morning!! fun fact: 73% of people poop within 30 minutes of waking up. you know what to do.",
-  "🌞 GOOD MORNING!! the poop bot has detected that you exist and would like to remind you that pooping is free.",
-  "🪣 hey!! wake up!! the leaderboard isn't going to climb itself. neither is whatever is currently in your intestines.",
-  "🎺 BWAAAH good morning!! this is your official daily notification that the toilet is undefeated and ready for battle.",
-  "🌻 good morning sunshine!! studies show that people who log their poops live longer. we made that up but why risk it.",
-];
-
-async function runGoodMorningDMs() {
-  for (const guild of client.guilds.cache.values()) {
-    await guild.members.fetch().catch(() => {});
-    const role = guild.roles.cache.find((r) => r.name === EKITTEN_ROLE_NAME);
-    if (!role) continue;
-    for (const member of guild.members.cache.values()) {
-      if (!member.roles.cache.has(role.id) || member.user.bot) continue;
-      const msg = GOOD_MORNING_MESSAGES[Math.floor(Math.random() * GOOD_MORNING_MESSAGES.length)];
-      await member.send(msg).catch(() => {});
-    }
-  }
-}
-
-cron.schedule("0 7 * * *", () => runGoodMorningDMs(), { timezone: "America/Los_Angeles" });
-
 // ── Tag game ───────────────────────────────────────────────
 async function runTagDailyReset() {
   if (!db.tag) db.tag = { itUserId: null, itUserName: null };
